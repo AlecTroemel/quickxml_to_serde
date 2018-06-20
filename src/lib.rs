@@ -1,10 +1,12 @@
 extern crate minidom;
 extern crate quick_xml;
+
+#[macro_use]
 extern crate serde_json;
 
 use minidom::Element;
-use quick_xml::Reader;
 use serde_json::{Map, Number, Value};
+use std::str::FromStr;
 
 fn parse_text(text: &str) -> Value {
     match text.parse::<f64>() {
@@ -84,7 +86,53 @@ pub fn xml_to_map(e: &Element) -> Value {
 }
 
 pub fn xml_string_to_json(xml: String) -> Value {
-    let mut reader = Reader::from_str(xml.as_str());//.expect("failed loading str into reader");
-    let root = Element::from_reader(&mut reader).expect("failed loading into minidom");
+    let root = Element::from_str(xml.as_str()).unwrap();
     xml_to_map(&root)
+}
+
+pub fn map_over_children<F: FnMut(String, Value)>(xml: String, mut iteratee: F) {
+    let root = Element::from_str(xml.as_str()).unwrap();
+    println!("here");
+    for child in root.children() {
+        let mut child_xml = Vec::new();
+        child
+            .write_to(&mut child_xml)
+            .expect("successfully write to the vector");
+        iteratee(String::from_utf8(child_xml).unwrap(), xml_to_map(&child));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::Value;
+
+    #[test]
+    fn map_over_children() {
+        let expected_list = [
+            (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>",
+                json!({"b": "test1"}),
+            ),
+            (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test2</b>",
+                json!({"b": "test2"}),
+            ),
+            (
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test3</b>",
+                json!({"b": "test3"}),
+            ),
+        ];
+        let mut expected = expected_list.iter();
+
+        map_over_children(
+            String::from("<a><b>test1</b><b>test2</b><b>test3</b></a>"),
+            |xml: String, js: Value| {
+                let expect = expected.next().unwrap();
+
+                assert_eq!(expect.0, xml);
+                assert_eq!(expect.1, js);
+            },
+        )
+    }
 }
