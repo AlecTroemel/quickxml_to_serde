@@ -92,7 +92,7 @@ pub fn xml_string_to_json(xml: String) -> Value {
 
 pub fn map_over_children<F: FnMut(String, Value)>(xml: String, mut iteratee: F) {
     let root = Element::from_str(xml.as_str()).unwrap();
-    println!("here");
+
     for child in root.children() {
         let mut child_xml = Vec::new();
         child
