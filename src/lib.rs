@@ -102,13 +102,26 @@ pub fn map_over_children<F: FnMut(String, Value)>(xml: String, mut iteratee: F) 
     }
 }
 
+pub fn map_of_children(xml: String) -> Vec<(String, Value)> {
+    let root = Element::from_str(xml.as_str()).unwrap();
+
+    let iter = root.children().map(|child| {
+        let mut child_xml = Vec::new();
+        child
+            .write_to(&mut child_xml)
+            .expect("successfully write to the vector");
+        (String::from_utf8(child_xml).unwrap(), xml_to_map(&child))
+    });
+    iter.collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value;
 
     #[test]
-    fn map_over_children() {
+    fn map_over_children_test() {
         let expected_list = [
             (
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>",
@@ -134,5 +147,25 @@ mod tests {
                 assert_eq!(expect.1, js);
             },
         )
+    }
+
+    #[test]
+    fn map_of_children_test() {
+        let expected = vec![
+            (
+                String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>"),
+                json!({"b": "test1"}),
+            ),
+            (
+                String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test2</b>"),
+                json!({"b": "test2"}),
+            ),
+            (
+                String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test3</b>"),
+                json!({"b": "test3"}),
+            ),
+        ];
+        let result = map_of_children(String::from("<a><b>test1</b><b>test2</b><b>test3</b></a>"));
+        assert_eq!(expected, result);
     }
 }
