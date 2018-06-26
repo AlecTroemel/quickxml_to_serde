@@ -1,6 +1,6 @@
 [package]
 name = "quickxml_to_serde"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Alec Troemel <alec@mirusresearch.com>"]
 description = "Convert between XML JSON using quickxml and serde"
 repository = "https://github.com/AlecTroemel/quickxml_to_serde"

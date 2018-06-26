@@ -5,7 +5,9 @@ extern crate quick_xml;
 extern crate serde_json;
 
 use minidom::Element;
+use quick_xml::Reader;
 use serde_json::{Map, Number, Value};
+use std::io::BufRead;
 use std::str::FromStr;
 
 fn parse_text(text: &str) -> Value {
@@ -90,29 +92,35 @@ pub fn xml_string_to_json(xml: String) -> Value {
     xml_to_map(&root)
 }
 
-pub fn map_over_children<F: FnMut(String, Value)>(xml: String, mut iteratee: F) {
-    let root = Element::from_str(xml.as_str()).unwrap();
+pub fn map_over_children<T: BufRead, F: FnMut(&str, &Value)>(xml: T, mut iteratee: F) {
+    let mut reader = Reader::from_reader(xml);
+    let root = Element::from_reader(&mut reader).unwrap();
 
     for child in root.children() {
         let mut child_xml = Vec::new();
         child
             .write_to(&mut child_xml)
             .expect("successfully write to the vector");
-        iteratee(String::from_utf8(child_xml).unwrap(), xml_to_map(&child));
+        let xml_string = String::from_utf8(child_xml).unwrap();
+        iteratee(xml_string.as_str(), &xml_to_map(&child));
     }
 }
 
-pub fn map_of_children(xml: String) -> Vec<(String, Value)> {
-    let root = Element::from_str(xml.as_str()).unwrap();
+pub fn map_of_children(root: Element) -> Vec<(String, Value)> {
+    root.children()
+        .map(|child| {
+            let mut child_xml = Vec::new();
+            child
+                .write_to(&mut child_xml)
+                .expect("successfully write to the vector");
+            (String::from_utf8(child_xml).unwrap(), xml_to_map(&child))
+        })
+        .collect()
+}
 
-    let iter = root.children().map(|child| {
-        let mut child_xml = Vec::new();
-        child
-            .write_to(&mut child_xml)
-            .expect("successfully write to the vector");
-        (String::from_utf8(child_xml).unwrap(), xml_to_map(&child))
-    });
-    iter.collect()
+pub fn get_root<T: BufRead>(xml: T) -> Result<Element, minidom::Error> {
+    let mut reader = Reader::from_reader(xml);
+    Element::from_reader(&mut reader)
 }
 
 #[cfg(test)]
