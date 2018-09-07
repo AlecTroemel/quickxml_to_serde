@@ -11,21 +11,21 @@ use std::io::BufRead;
 use std::str::FromStr;
 
 fn parse_text(text: &str) -> Value {
-    match text.parse::<f64>() {
-        Ok(v) => match Number::from_f64(v) {
-            Some(v) => {
-                return Value::Number(v);
-            }
-            _ => {}
-        },
-        _ => {}
+    // ints
+    if let Ok(v) = text.parse::<u64>() {
+        return Value::Number(Number::from(v));
     }
 
-    match text.parse::<bool>() {
-        Ok(v) => {
-            return Value::Bool(v);
+    // floats
+    if let Ok(v) = text.parse::<f64>() {
+        if let Some(val) = Number::from_f64(v) {
+            return Value::Number(val);
         }
-        _ => {}
+    }
+
+    // booleans
+    if let Ok(v) = text.parse::<bool>() {
+        return Value::Bool(v);
     }
 
     Value::String(text.into())
@@ -128,52 +128,86 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
+    // #[test]
+    // fn map_over_children_test() {
+    //     let expected_list = [
+    //         (
+    //             "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>",
+    //             json!({"b": "test1"}),
+    //         ),
+    //         (
+    //             "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test2</b>",
+    //             json!({"b": "test2"}),
+    //         ),
+    //         (
+    //             "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test3</b>",
+    //             json!({"b": "test3"}),
+    //         ),
+    //     ];
+    //     let mut expected = expected_list.iter();
+
+    //     map_over_children(
+    //         String::from("<a><b>test1</b><b>test2</b><b>test3</b></a>"),
+    //         |xml: String, js: Value| {
+    //             let expect = expected.next().unwrap();
+
+    //             assert_eq!(expect.0, xml);
+    //             assert_eq!(expect.1, js);
+    //         },
+    //     )
+    // }
+
+    // #[test]
+    // fn map_of_children_test() {
+    //     let expected = vec![
+    //         (
+    //             String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>"),
+    //             json!({"b": "test1"}),
+    //         ),
+    //         (
+    //             String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test2</b>"),
+    //             json!({"b": "test2"}),
+    //         ),
+    //         (
+    //             String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test3</b>"),
+    //             json!({"b": "test3"}),
+    //         ),
+    //     ];
+    //     let result = map_of_children(String::from("<a><b>test1</b><b>test2</b><b>test3</b></a>"));
+    //     assert_eq!(expected, result);
+    // }
+
     #[test]
-    fn map_over_children_test() {
-        let expected_list = [
-            (
-                "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>",
-                json!({"b": "test1"}),
-            ),
-            (
-                "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test2</b>",
-                json!({"b": "test2"}),
-            ),
-            (
-                "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test3</b>",
-                json!({"b": "test3"}),
-            ),
-        ];
-        let mut expected = expected_list.iter();
+    fn test_numbers() {
+        let expected = json!({
+            "a": {
+                "b":[ 12345, 12345.0, 12345.6 ]
+            }
+        });
+        let result = xml_string_to_json(String::from(
+            "<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>",
+        ));
+        println!("{:?}", result);
 
-        map_over_children(
-            String::from("<a><b>test1</b><b>test2</b><b>test3</b></a>"),
-            |xml: String, js: Value| {
-                let expect = expected.next().unwrap();
+        // let expected_list = vec![
+        //     (
+        //         String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>12345</b>"),
+        //         json!({"b": 12345}),
+        //     ),
+        //     (
+        //         String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>12345.0</b>"),
+        //         json!({"b": 12345.0}),
+        //     ),
+        //     (
+        //         String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>12345.6</b>"),
+        //         json!({"b": 12345.6}),
+        //     ),
+        // ];
 
-                assert_eq!(expect.0, xml);
-                assert_eq!(expect.1, js);
-            },
-        )
-    }
-
-    #[test]
-    fn map_of_children_test() {
-        let expected = vec![
-            (
-                String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>"),
-                json!({"b": "test1"}),
-            ),
-            (
-                String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test2</b>"),
-                json!({"b": "test2"}),
-            ),
-            (
-                String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test3</b>"),
-                json!({"b": "test3"}),
-            ),
-        ];
-        let result = map_of_children(String::from("<a><b>test1</b><b>test2</b><b>test3</b></a>"));
+        // let result = map_of_children(String::from(
+        //     "<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>",
+        // ));
         assert_eq!(expected, result);
     }
+
 }
