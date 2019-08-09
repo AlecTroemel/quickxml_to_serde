@@ -11,6 +11,11 @@ use std::io::BufRead;
 use std::str::FromStr;
 
 fn parse_text(text: &str) -> Value {
+    // don't parse octal numbers and those with leading 0
+    if text.trim_start().starts_with("0") {
+        return Value::String(text.into())
+    }
+
     // ints
     if let Ok(v) = text.parse::<u64>() {
         return Value::Number(Number::from(v));
