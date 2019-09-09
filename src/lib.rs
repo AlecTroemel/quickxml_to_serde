@@ -225,6 +225,8 @@ mod tests {
         assert_eq!(0, parse_text("0"));
         assert_eq!(0.42, parse_text("0.4200"));
         assert_eq!(142.42, parse_text("142.4200"));
+        assert_eq!("0xAC", parse_text("0xAC"));
+        assert_eq!("0x03", parse_text("0x03"));
         assert_eq!("142,4200", parse_text("142,4200"));
         assert_eq!("142,420,0", parse_text("142,420,0"));
         assert_eq!("142,420,0.0", parse_text("142,420,0.0"));
