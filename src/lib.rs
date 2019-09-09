@@ -11,18 +11,22 @@ use std::io::BufRead;
 use std::str::FromStr;
 
 fn parse_text(text: &str) -> Value {
-    // don't parse octal numbers and those with leading 0
-    if text.trim_start().starts_with("0") {
-        return Value::String(text.into())
-    }
-
     // ints
     if let Ok(v) = text.parse::<u64>() {
+        // don't parse octal numbers and those with leading 0
+        let text = text.trim_start();
+        if text.starts_with("0") && v != 0 {
+            return Value::String(text.into())
+        }
         return Value::Number(Number::from(v));
     }
 
     // floats
     if let Ok(v) = text.parse::<f64>() {
+        let text = text.trim_start();
+        if text.starts_with("0") && !text.starts_with("0.") && v != 0.0 {
+            return Value::String(text.into())
+        }
         if let Some(val) = Number::from_f64(v) {
             return Value::Number(val);
         }
@@ -215,4 +219,22 @@ mod tests {
         assert_eq!(expected, result);
     }
 
+    #[test]
+    fn test_parse_text() {
+        assert_eq!(0.0, parse_text("0.0"));
+        assert_eq!(0, parse_text("0"));
+        assert_eq!(0.42, parse_text("0.4200"));
+        assert_eq!(142.42, parse_text("142.4200"));
+        assert_eq!("142,4200", parse_text("142,4200"));
+        assert_eq!("142,420,0", parse_text("142,420,0"));
+        assert_eq!("142,420,0.0", parse_text("142,420,0.0"));
+        assert_eq!("0Test", parse_text("0Test"));
+        assert_eq!("0.Test", parse_text("0.Test"));
+        assert_eq!("0.22Test", parse_text("0.22Test"));
+        assert_eq!("0044951", parse_text("0044951"));
+        assert_eq!(1, parse_text("1"));
+        assert_eq!(false, parse_text("false"));
+        assert_eq!(true, parse_text("true"));
+        assert_eq!("True", parse_text("True"));
+    }
 }
