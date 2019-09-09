@@ -24,7 +24,7 @@ fn parse_text(text: &str) -> Value {
     // floats
     if let Ok(v) = text.parse::<f64>() {
         let text = text.trim_start();
-        if text.starts_with("0") && !text.starts_with("0.") && v != 0.0 {
+        if text.starts_with("0") && !text.starts_with("0.") {
             return Value::String(text.into())
         }
         if let Some(val) = Number::from_f64(v) {
