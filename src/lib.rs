@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Config {
-    leading_zero_as_string: bool,
+    pub leading_zero_as_string: bool,
 }
 
 fn parse_text(text: &str, config: Config) -> Value {
