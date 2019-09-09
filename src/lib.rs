@@ -10,14 +10,19 @@ use serde_json::{Map, Number, Value};
 use std::io::BufRead;
 use std::str::FromStr;
 
-fn parse_text(text: &str) -> Value {
+#[derive(Debug, Copy, Clone)]
+pub struct Config {
+    leading_zero_as_string: bool,
+}
+
+fn parse_text(text: &str, config: Config) -> Value {
     let text = text.trim();
 
     // ints
     if let Ok(v) = text.parse::<u64>() {
         // don't parse octal numbers and those with leading 0
-        if text.starts_with("0") && v != 0 {
-            return Value::String(text.into())
+        if text.starts_with("0") && v != 0 && config.leading_zero_as_string {
+            return Value::String(text.into());
         }
         return Value::Number(Number::from(v));
     }
@@ -25,7 +30,7 @@ fn parse_text(text: &str) -> Value {
     // floats
     if let Ok(v) = text.parse::<f64>() {
         if text.starts_with("0") && !text.starts_with("0.") {
-            return Value::String(text.into())
+            return Value::String(text.into());
         }
         if let Some(val) = Number::from_f64(v) {
             return Value::Number(val);
@@ -40,27 +45,30 @@ fn parse_text(text: &str) -> Value {
     Value::String(text.into())
 }
 
-fn convert_node(el: &Element) -> Option<Value> {
+fn convert_node(el: &Element, config: Config) -> Option<Value> {
     if el.text().trim() != "" {
         if el.attrs().count() > 0 {
             Some(Value::Object(
                 el.attrs()
-                    .map(|(k, v)| (format!("@{}", k), parse_text(&v)))
-                    .chain(vec![("#text".to_string(), parse_text(&el.text()[..]))])
+                    .map(|(k, v)| (format!("@{}", k), parse_text(&v, config)))
+                    .chain(vec![(
+                        "#text".to_string(),
+                        parse_text(&el.text()[..], config),
+                    )])
                     .collect(),
             ))
         } else {
-            Some(parse_text(&el.text()[..]))
+            Some(parse_text(&el.text()[..], config))
         }
     } else {
         let mut data = Map::new();
 
         for (k, v) in el.attrs() {
-            data.insert(format!("@{}", k), parse_text(&v));
+            data.insert(format!("@{}", k), parse_text(&v, config));
         }
 
         for child in el.children() {
-            match convert_node(child) {
+            match convert_node(child, config) {
                 Some(val) => {
                     let name = &child.name().to_string();
 
@@ -87,21 +95,32 @@ fn convert_node(el: &Element) -> Option<Value> {
     }
 }
 
-pub fn xml_to_map(e: &Element) -> Value {
+pub fn xml_to_map(e: &Element, config: Option<Config>) -> Value {
+    let config = match config {
+        Some(c) => c,
+        None => Config {
+            leading_zero_as_string: false,
+        },
+    };
+
     let mut data = Map::new();
     data.insert(
         e.name().to_string(),
-        convert_node(&e).unwrap_or(Value::Null),
+        convert_node(&e, config).unwrap_or(Value::Null),
     );
     Value::Object(data)
 }
 
-pub fn xml_string_to_json(xml: String) -> Value {
+pub fn xml_string_to_json(xml: String, config: Option<Config>) -> Value {
     let root = Element::from_str(xml.as_str()).unwrap();
-    xml_to_map(&root)
+    xml_to_map(&root, config)
 }
 
-pub fn map_over_children<T: BufRead, F: FnMut(&str, &Value)>(xml: T, mut iteratee: F) {
+pub fn map_over_children<T: BufRead, F: FnMut(&str, &Value)>(
+    xml: T,
+    mut iteratee: F,
+    config: Option<Config>,
+) {
     let mut reader = Reader::from_reader(xml);
     let root = Element::from_reader(&mut reader).unwrap();
 
@@ -111,18 +130,21 @@ pub fn map_over_children<T: BufRead, F: FnMut(&str, &Value)>(xml: T, mut iterate
             .write_to(&mut child_xml)
             .expect("successfully write to the vector");
         let xml_string = String::from_utf8(child_xml).unwrap();
-        iteratee(xml_string.as_str(), &xml_to_map(&child));
+        iteratee(xml_string.as_str(), &xml_to_map(&child, config));
     }
 }
 
-pub fn map_of_children(root: Element) -> Vec<(String, Value)> {
+pub fn map_of_children(root: Element, config: Option<Config>) -> Vec<(String, Value)> {
     root.children()
         .map(|child| {
             let mut child_xml = Vec::new();
             child
                 .write_to(&mut child_xml)
                 .expect("successfully write to the vector");
-            (String::from_utf8(child_xml).unwrap(), xml_to_map(&child))
+            (
+                String::from_utf8(child_xml).unwrap(),
+                xml_to_map(&child, config),
+            )
         })
         .collect()
 }
@@ -193,9 +215,10 @@ mod tests {
                 "b":[ 12345, 12345.0, 12345.6 ]
             }
         });
-        let result = xml_string_to_json(String::from(
-            "<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>",
-        ));
+        let result = xml_string_to_json(
+            String::from("<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>"),
+            None,
+        );
         println!("{:?}", result);
 
         // let expected_list = vec![
@@ -221,22 +244,26 @@ mod tests {
 
     #[test]
     fn test_parse_text() {
-        assert_eq!(0.0, parse_text("0.0"));
-        assert_eq!(0, parse_text("0"));
-        assert_eq!(0.42, parse_text("0.4200"));
-        assert_eq!(142.42, parse_text("142.4200"));
-        assert_eq!("0xAC", parse_text("0xAC"));
-        assert_eq!("0x03", parse_text("0x03"));
-        assert_eq!("142,4200", parse_text("142,4200"));
-        assert_eq!("142,420,0", parse_text("142,420,0"));
-        assert_eq!("142,420,0.0", parse_text("142,420,0.0"));
-        assert_eq!("0Test", parse_text("0Test"));
-        assert_eq!("0.Test", parse_text("0.Test"));
-        assert_eq!("0.22Test", parse_text("0.22Test"));
-        assert_eq!("0044951", parse_text("0044951"));
-        assert_eq!(1, parse_text("1"));
-        assert_eq!(false, parse_text("false"));
-        assert_eq!(true, parse_text("true"));
-        assert_eq!("True", parse_text("True"));
+        let config = Config {
+            leading_zero_as_string: true,
+        };
+
+        assert_eq!(0.0, parse_text("0.0", config));
+        assert_eq!(0, parse_text("0", config));
+        assert_eq!(0.42, parse_text("0.4200", config));
+        assert_eq!(142.42, parse_text("142.4200", config));
+        assert_eq!("0xAC", parse_text("0xAC", config));
+        assert_eq!("0x03", parse_text("0x03", config));
+        assert_eq!("142,4200", parse_text("142,4200", config));
+        assert_eq!("142,420,0", parse_text("142,420,0", config));
+        assert_eq!("142,420,0.0", parse_text("142,420,0.0", config));
+        assert_eq!("0Test", parse_text("0Test", config));
+        assert_eq!("0.Test", parse_text("0.Test", config));
+        assert_eq!("0.22Test", parse_text("0.22Test", config));
+        assert_eq!("0044951", parse_text("0044951", config));
+        assert_eq!(1, parse_text("1", config));
+        assert_eq!(false, parse_text("false", config));
+        assert_eq!(true, parse_text("true", config));
+        assert_eq!("True", parse_text("True", config));
     }
 }
