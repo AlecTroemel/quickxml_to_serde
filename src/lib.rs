@@ -2,17 +2,58 @@ extern crate minidom;
 extern crate serde_json;
 
 use minidom::quick_xml::Reader;
-use minidom::Element;
+use minidom::{Element, Error};
 use serde_json::{Map, Number, Value};
 use std::io::BufRead;
 use std::str::FromStr;
 
-#[derive(Debug, Copy, Clone)]
+/// Tells the converter how to perform certain conversions.
+/// See docs for individual elements for more info.
 pub struct Config {
+    /// Numeric values starting with 0 will be treated as strings.
+    /// E.g. `<agent>007</agent>` will become `"agent":"007"`, while
+    /// <agent>7</agent>` will become `"agent":7`
+    /// Defaults to `false`.
     pub leading_zero_as_string: bool,
+    /// Prefix XML attribute names with this value to distinguish them from XML elements.
+    /// E.g. set it to `@` for `<x a="Hello!" />` to become `{"x": {"@a":"Hello!"}}`
+    /// Defaults to `@`.
+    pub xml_attr_prefix: String,
+    /// A property name XML text nodes.
+    /// E.g. set it to `text` for `<x a="Hello!">Goodbye!</x>` to become `{"x": {"@a":"Hello!", "text":"Goodbye!"}}`
+    /// XML nodes with text only and no attributes or no child elements are converted into props with the
+    /// name of the element. E.g. <x>Goodbye!</x>` becomes `{"x":"Goodbye!"}`
+    /// Defaults to `#text`
+    pub xml_text_node_prop_name: String,
 }
 
-fn parse_text(text: &str, config: Config) -> Value {
+impl Config {
+    /// Numbers with leading zero will be treated as numbers.
+    /// Prefix XML Attribute names with `@`
+    /// Name XML text nodes `#text` for nodes with other children
+    pub fn new_with_defaults() -> Self {
+        Config {
+            leading_zero_as_string: false,
+            xml_attr_prefix: "@".to_owned(),
+            xml_text_node_prop_name: "#text".to_owned(),
+        }
+    }
+
+    /// Create a Config object with non-default values. See the struct docs for more info.
+    pub fn new_with_custom_values(
+        leading_zero_as_string: bool,
+        xml_attr_prefix: &str,
+        xml_text_node_prop_name: &str,
+    ) -> Self {
+        Config {
+            leading_zero_as_string,
+            xml_attr_prefix: xml_attr_prefix.to_owned(),
+            xml_text_node_prop_name: xml_text_node_prop_name.to_owned(),
+        }
+    }
+}
+
+fn parse_text(text: &str, config: &Config) -> Value {
     let text = text.trim();
 
     // ints
@@ -42,7 +83,7 @@ fn parse_text(text: &str, config: Config) -> Value {
     Value::String(text.into())
 }
 
-fn convert_node(el: &Element, config: Config) -> Option<Value> {
+fn convert_node(el: &Element, config: &Config) -> Option<Value> {
     if el.text().trim() != "" {
         if el.attrs().count() > 0 {
             Some(Value::Object(
@@ -92,31 +133,25 @@ fn convert_node(el: &Element, config: Config) -> Option<Value> {
     }
 }
 
-pub fn xml_to_map(e: &Element, config: Option<Config>) -> Value {
-    let config = match config {
-        Some(c) => c,
-        None => Config {
-            leading_zero_as_string: false,
-        },
-    };
-
+fn xml_to_map(e: &Element, config: &Config) -> Value {
     let mut data = Map::new();
     data.insert(
         e.name().to_string(),
-        convert_node(&e, config).unwrap_or(Value::Null),
+        convert_node(&e, &config).unwrap_or(Value::Null),
     );
     Value::Object(data)
 }
 
-pub fn xml_string_to_json(xml: String, config: Option<Config>) -> Value {
-    let root = Element::from_str(xml.as_str()).unwrap();
-    xml_to_map(&root, config)
+/// Converts the given XML string into serde::Value using settings from `Config`.
+pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> {
+    let root = Element::from_str(xml.as_str())?;
+    Ok(xml_to_map(&root, config))
 }
 
 pub fn map_over_children<T: BufRead, F: FnMut(&str, &Value)>(
     xml: T,
     mut iteratee: F,
-    config: Option<Config>,
+    config: &Config,
 ) {
     let mut reader = Reader::from_reader(xml);
     let root = Element::from_reader(&mut reader).unwrap();
@@ -131,7 +166,7 @@ pub fn map_over_children<T: BufRead, F: FnMut(&str, &Value)>(
     }
 }
 
-pub fn map_of_children(root: Element, config: Option<Config>) -> Vec<(String, Value)> {
+pub fn map_of_children(root: Element, config: &Config) -> Vec<(String, Value)> {
     root.children()
         .map(|child| {
             let mut child_xml = Vec::new();
@@ -214,7 +249,7 @@ mod tests {
         });
         let result = xml_string_to_json(
             String::from("<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>"),
-            None,
+            &Config::new_with_defaults(),
         );
         println!("{:?}", result);
 
@@ -236,31 +271,29 @@ mod tests {
         // let result = map_of_children(String::from(
         //     "<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>",
         // ));
-        assert_eq!(expected, result);
+        assert_eq!(expected, result.unwrap());
     }
 
     #[test]
     fn test_parse_text() {
-        let config = Config {
-            leading_zero_as_string: true,
-        };
+        let config = Config::new_with_custom_values(true, "@", "#text");
 
-        assert_eq!(0.0, parse_text("0.0", config));
-        assert_eq!(0, parse_text("0", config));
-        assert_eq!(0.42, parse_text("0.4200", config));
-        assert_eq!(142.42, parse_text("142.4200", config));
-        assert_eq!("0xAC", parse_text("0xAC", config));
-        assert_eq!("0x03", parse_text("0x03", config));
-        assert_eq!("142,4200", parse_text("142,4200", config));
-        assert_eq!("142,420,0", parse_text("142,420,0", config));
-        assert_eq!("142,420,0.0", parse_text("142,420,0.0", config));
-        assert_eq!("0Test", parse_text("0Test", config));
-        assert_eq!("0.Test", parse_text("0.Test", config));
-        assert_eq!("0.22Test", parse_text("0.22Test", config));
-        assert_eq!("0044951", parse_text("0044951", config));
-        assert_eq!(1, parse_text("1", config));
-        assert_eq!(false, parse_text("false", config));
-        assert_eq!(true, parse_text("true", config));
-        assert_eq!("True", parse_text("True", config));
+        assert_eq!(0.0, parse_text("0.0", &config));
+        assert_eq!(0, parse_text("0", &config));
+        assert_eq!(0.42, parse_text("0.4200", &config));
+        assert_eq!(142.42, parse_text("142.4200", &config));
+        assert_eq!("0xAC", parse_text("0xAC", &config));
+        assert_eq!("0x03", parse_text("0x03", &config));
+        assert_eq!("142,4200", parse_text("142,4200", &config));
+        assert_eq!("142,420,0", parse_text("142,420,0", &config));
+        assert_eq!("142,420,0.0", parse_text("142,420,0.0", &config));
+        assert_eq!("0Test", parse_text("0Test", &config));
+        assert_eq!("0.Test", parse_text("0.Test", &config));
+        assert_eq!("0.22Test", parse_text("0.22Test", &config));
+        assert_eq!("0044951", parse_text("0044951", &config));
+        assert_eq!(1, parse_text("1", &config));
+        assert_eq!(false, parse_text("false", &config));
+        assert_eq!(true, parse_text("true", &config));
+        assert_eq!("True", parse_text("True", &config));
     }
 }
