@@ -1,6 +1,6 @@
 # quickxml_to_serde
 
-Convert XML to JSON using quickxml and serde. Inspired by [node2object](https://github.com/vorot93/node2object).
+Convert XML to JSON using [quick-xml](https://github.com/tafia/quick-xml) and [serde](https://github.com/serde-rs/json). Inspired by [node2object](https://github.com/vorot93/node2object).
 
 ## Usage examples
 
