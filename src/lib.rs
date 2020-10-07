@@ -2,7 +2,7 @@
 //! Fast and flexible conversion from XML to JSON using [quick-xml](https://github.com/tafia/quick-xml)
 //! and [serde](https://github.com/serde-rs/json). Inspired by [node2object](https://github.com/vorot93/node2object).
 //!
-//! This crate converts XML elements, attributes and text nodes into a corresponding JSON structure.
+//! This crate converts XML elements, attributes and text nodes directly into a corresponding JSON structure.
 //! Some common usage scenarios would be converting XML into JSON for loading into No-SQL databases
 //! or sending it to the front end application.
 //!
