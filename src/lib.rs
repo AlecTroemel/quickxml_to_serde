@@ -1,10 +1,8 @@
 extern crate minidom;
 extern crate serde_json;
 
-use minidom::quick_xml::Reader;
 use minidom::{Element, Error};
 use serde_json::{Map, Number, Value};
-use std::io::BufRead;
 use std::str::FromStr;
 
 /// Tells the converter how to perform certain conversions.
@@ -146,44 +144,6 @@ fn xml_to_map(e: &Element, config: &Config) -> Value {
 pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> {
     let root = Element::from_str(xml.as_str())?;
     Ok(xml_to_map(&root, config))
-}
-
-pub fn map_over_children<T: BufRead, F: FnMut(&str, &Value)>(
-    xml: T,
-    mut iteratee: F,
-    config: &Config,
-) {
-    let mut reader = Reader::from_reader(xml);
-    let root = Element::from_reader(&mut reader).unwrap();
-
-    for child in root.children() {
-        let mut child_xml = Vec::new();
-        child
-            .write_to(&mut child_xml)
-            .expect("successfully write to the vector");
-        let xml_string = String::from_utf8(child_xml).unwrap();
-        iteratee(xml_string.as_str(), &xml_to_map(&child, config));
-    }
-}
-
-pub fn map_of_children(root: Element, config: &Config) -> Vec<(String, Value)> {
-    root.children()
-        .map(|child| {
-            let mut child_xml = Vec::new();
-            child
-                .write_to(&mut child_xml)
-                .expect("successfully write to the vector");
-            (
-                String::from_utf8(child_xml).unwrap(),
-                xml_to_map(&child, config),
-            )
-        })
-        .collect()
-}
-
-pub fn get_root<T: BufRead>(xml: T) -> Result<Element, minidom::Error> {
-    let mut reader = Reader::from_reader(xml);
-    Element::from_reader(&mut reader)
 }
 
 #[cfg(test)]
