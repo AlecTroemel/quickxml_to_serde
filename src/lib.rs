@@ -1,3 +1,38 @@
+//! # quickxml_to_serde
+//! Fast and flexible conversion from XML to JSON using [quick-xml](https://github.com/tafia/quick-xml)
+//! and [serde](https://github.com/serde-rs/json). Inspired by [node2object](https://github.com/vorot93/node2object).
+//!
+//! This crate converts XML elements, attributes and text nodes into a corresponding JSON structure.
+//! Some common usage scenarios would be converting XML into JSON for loading into No-SQL databases
+//! or sending it to the front end application.
+//!
+//! Because of the richness and flexibility of XML some conversion behavior is configurable:
+//! - attribute name prefixes
+//! - naming of text nodes
+//! - number format conversion
+//!
+//! ## Usage example
+//! ```no_run
+//! extern crate quickxml_to_serde;
+//! use quickxml_to_serde::{xml_string_to_json, Config};
+//!
+//! fn main() {
+//!    let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="1"><b><c attr2="001">some text</c></b></a>"#;
+//!    let conf = Config::new_with_defaults();
+//!    let json = xml_string_to_json(xml.to_owned(), &conf);
+//!    println!("{}", json.expect("Invalid XML").to_string());
+//!
+//!    let conf = Config::new_with_custom_values(true, "", "txt");
+//!    let json = xml_string_to_json(xml.to_owned(), &conf);
+//!    println!("{}", json.expect("Invalid XML").to_string());
+//! }
+//! ```
+//! * **Output with default config:** `{"a":{"@attr1":1,"b":{"c":{"#text":"some text","@attr2":1}}}}`
+//! * **Output with custom config:** `{"a":{"attr1":1,"b":{"c":{"attr2":"001","txt":"some text"}}}}`
+//!
+//! ## Detailed documentation
+//! See [README](https://github.com/AlecTroemel/quickxml_to_serde) in the source repo for more examples, limitations and detailed behavior description.
+
 extern crate minidom;
 extern crate serde_json;
 
@@ -6,7 +41,7 @@ use serde_json::{Map, Number, Value};
 use std::str::FromStr;
 
 /// Tells the converter how to perform certain conversions.
-/// See docs for individual elements for more info.
+/// See docs for individual fields for more info.
 pub struct Config {
     /// Numeric values starting with 0 will be treated as strings.
     /// E.g. `<agent>007</agent>` will become `"agent":"007"`, while
@@ -269,9 +304,11 @@ mod tests {
             // save as json
             entry.set_extension("json");
             let mut file = File::create(&entry).unwrap();
-            assert!(file
-                .write_all(to_string_pretty(&json).unwrap().as_bytes())
-                .is_ok(), format!("Failed on {:?}", entry.as_os_str()));
+            assert!(
+                file.write_all(to_string_pretty(&json).unwrap().as_bytes())
+                    .is_ok(),
+                format!("Failed on {:?}", entry.as_os_str())
+            );
         }
     }
 }
