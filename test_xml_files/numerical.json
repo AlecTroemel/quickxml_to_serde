@@ -1,0 +1,42 @@
+{
+  "Root": {
+    "Data": [
+      {
+        "Category": "A",
+        "Price": 24.5,
+        "Quantity": 3
+      },
+      {
+        "Category": "B",
+        "Price": 89.99,
+        "Quantity": 1
+      },
+      {
+        "Category": "A",
+        "Price": 4.95,
+        "Quantity": 5
+      },
+      {
+        "Category": "A",
+        "Price": 66.0,
+        "Quantity": 3
+      },
+      {
+        "Category": "B",
+        "Price": 0.99,
+        "Quantity": 10
+      },
+      {
+        "Category": "A",
+        "Price": 29.0,
+        "Quantity": 15
+      },
+      {
+        "Category": "B",
+        "Price": 6.99,
+        "Quantity": 8
+      }
+    ],
+    "TaxRate": 7.25
+  }
+}

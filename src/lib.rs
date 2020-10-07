@@ -158,7 +158,9 @@ pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use serde_json::{json, to_string_pretty};
+    use std::fs::File;
+    use std::io::prelude::*;
 
     #[test]
     fn test_numbers() {
@@ -235,5 +237,43 @@ mod tests {
         assert_eq!(false, parse_text("false", true));
         assert_eq!(true, parse_text("true", true));
         assert_eq!("True", parse_text("True", true));
+    }
+
+    #[test]
+    fn convert_test_files() {
+        // get the list of files in the text directory
+        let mut entries = std::fs::read_dir("./test_xml_files")
+            .unwrap()
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, std::io::Error>>()
+            .unwrap();
+
+        entries.sort();
+        println!("Found {}", entries.len());
+
+        let conf = Config::new_with_custom_values(true, "", "text");
+
+        for mut entry in entries {
+            // only XML files should be processed
+            if entry.extension().unwrap() != "xml" {
+                println!("skipping");
+                continue;
+            }
+
+            // read the XML file
+            let mut file = File::open(&entry).unwrap();
+            let mut xml_contents = String::new();
+            file.read_to_string(&mut xml_contents).unwrap();
+
+            // convert to json
+            let json = xml_string_to_json(xml_contents, &conf).unwrap();
+
+            // save as json
+            entry.set_extension("json");
+            let mut file = File::create(entry).unwrap();
+            assert!(file
+                .write_all(to_string_pretty(&json).unwrap().as_bytes())
+                .is_ok());
+        }
     }
 }
