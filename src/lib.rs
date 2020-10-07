@@ -249,14 +249,12 @@ mod tests {
             .unwrap();
 
         entries.sort();
-        println!("Found {}", entries.len());
 
         let conf = Config::new_with_custom_values(true, "", "text");
 
         for mut entry in entries {
             // only XML files should be processed
             if entry.extension().unwrap() != "xml" {
-                println!("skipping");
                 continue;
             }
 
@@ -270,10 +268,10 @@ mod tests {
 
             // save as json
             entry.set_extension("json");
-            let mut file = File::create(entry).unwrap();
+            let mut file = File::create(&entry).unwrap();
             assert!(file
                 .write_all(to_string_pretty(&json).unwrap().as_bytes())
-                .is_ok());
+                .is_ok(), format!("Failed on {:?}", entry.as_os_str()));
         }
     }
 }
