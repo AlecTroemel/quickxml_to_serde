@@ -1,11 +1,8 @@
 extern crate minidom;
-extern crate quick_xml;
-
-#[macro_use]
 extern crate serde_json;
 
+use minidom::quick_xml::Reader;
 use minidom::Element;
-use quick_xml::Reader;
 use serde_json::{Map, Number, Value};
 use std::io::BufRead;
 use std::str::FromStr;
@@ -157,7 +154,7 @@ pub fn get_root<T: BufRead>(xml: T) -> Result<Element, minidom::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
+    use serde_json::json;
 
     // #[test]
     // fn map_over_children_test() {
