@@ -51,13 +51,14 @@ impl Config {
     }
 }
 
-fn parse_text(text: &str, config: &Config) -> Value {
+/// Returns the text as one of serde::Value types: int, float, bool or string.
+fn parse_text(text: &str, leading_zero_as_string: bool) -> Value {
     let text = text.trim();
 
     // ints
     if let Ok(v) = text.parse::<u64>() {
         // don't parse octal numbers and those with leading 0
-        if text.starts_with("0") && v != 0 && config.leading_zero_as_string {
+        if text.starts_with("0") && v != 0 && leading_zero_as_string {
             return Value::String(text.into());
         }
         return Value::Number(Number::from(v));
@@ -86,21 +87,29 @@ fn convert_node(el: &Element, config: &Config) -> Option<Value> {
         if el.attrs().count() > 0 {
             Some(Value::Object(
                 el.attrs()
-                    .map(|(k, v)| (format!("@{}", k), parse_text(&v, config)))
+                    .map(|(k, v)| {
+                        (
+                            [config.xml_attr_prefix.clone(), k.to_owned()].concat(),
+                            parse_text(&v, config.leading_zero_as_string),
+                        )
+                    })
                     .chain(vec![(
-                        "#text".to_string(),
-                        parse_text(&el.text()[..], config),
+                        config.xml_text_node_prop_name.clone(),
+                        parse_text(&el.text()[..], config.leading_zero_as_string),
                     )])
                     .collect(),
             ))
         } else {
-            Some(parse_text(&el.text()[..], config))
+            Some(parse_text(&el.text()[..], config.leading_zero_as_string))
         }
     } else {
         let mut data = Map::new();
 
         for (k, v) in el.attrs() {
-            data.insert(format!("@{}", k), parse_text(&v, config));
+            data.insert(
+                [config.xml_attr_prefix.clone(), k.to_owned()].concat(),
+                parse_text(&v, config.leading_zero_as_string),
+            );
         }
 
         for child in el.children() {
@@ -151,55 +160,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // #[test]
-    // fn map_over_children_test() {
-    //     let expected_list = [
-    //         (
-    //             "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>",
-    //             json!({"b": "test1"}),
-    //         ),
-    //         (
-    //             "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test2</b>",
-    //             json!({"b": "test2"}),
-    //         ),
-    //         (
-    //             "<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test3</b>",
-    //             json!({"b": "test3"}),
-    //         ),
-    //     ];
-    //     let mut expected = expected_list.iter();
-
-    //     map_over_children(
-    //         String::from("<a><b>test1</b><b>test2</b><b>test3</b></a>"),
-    //         |xml: String, js: Value| {
-    //             let expect = expected.next().unwrap();
-
-    //             assert_eq!(expect.0, xml);
-    //             assert_eq!(expect.1, js);
-    //         },
-    //     )
-    // }
-
-    // #[test]
-    // fn map_of_children_test() {
-    //     let expected = vec![
-    //         (
-    //             String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test1</b>"),
-    //             json!({"b": "test1"}),
-    //         ),
-    //         (
-    //             String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test2</b>"),
-    //             json!({"b": "test2"}),
-    //         ),
-    //         (
-    //             String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>test3</b>"),
-    //             json!({"b": "test3"}),
-    //         ),
-    //     ];
-    //     let result = map_of_children(String::from("<a><b>test1</b><b>test2</b><b>test3</b></a>"));
-    //     assert_eq!(expected, result);
-    // }
-
     #[test]
     fn test_numbers() {
         let expected = json!({
@@ -211,49 +171,69 @@ mod tests {
             String::from("<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>"),
             &Config::new_with_defaults(),
         );
-        println!("{:?}", result);
 
-        // let expected_list = vec![
-        //     (
-        //         String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>12345</b>"),
-        //         json!({"b": 12345}),
-        //     ),
-        //     (
-        //         String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>12345.0</b>"),
-        //         json!({"b": 12345.0}),
-        //     ),
-        //     (
-        //         String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><b>12345.6</b>"),
-        //         json!({"b": 12345.6}),
-        //     ),
-        // ];
-
-        // let result = map_of_children(String::from(
-        //     "<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>",
-        // ));
         assert_eq!(expected, result.unwrap());
     }
 
     #[test]
-    fn test_parse_text() {
-        let config = Config::new_with_custom_values(true, "@", "#text");
+    fn test_mixed_nodes() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="val1">some text</a>"#;
 
-        assert_eq!(0.0, parse_text("0.0", &config));
-        assert_eq!(0, parse_text("0", &config));
-        assert_eq!(0.42, parse_text("0.4200", &config));
-        assert_eq!(142.42, parse_text("142.4200", &config));
-        assert_eq!("0xAC", parse_text("0xAC", &config));
-        assert_eq!("0x03", parse_text("0x03", &config));
-        assert_eq!("142,4200", parse_text("142,4200", &config));
-        assert_eq!("142,420,0", parse_text("142,420,0", &config));
-        assert_eq!("142,420,0.0", parse_text("142,420,0.0", &config));
-        assert_eq!("0Test", parse_text("0Test", &config));
-        assert_eq!("0.Test", parse_text("0.Test", &config));
-        assert_eq!("0.22Test", parse_text("0.22Test", &config));
-        assert_eq!("0044951", parse_text("0044951", &config));
-        assert_eq!(1, parse_text("1", &config));
-        assert_eq!(false, parse_text("false", &config));
-        assert_eq!(true, parse_text("true", &config));
-        assert_eq!("True", parse_text("True", &config));
+        // test with default config values
+        let expected_1 = json!({
+            "a": {
+                "@attr1":"val1",
+                "#text":"some text"
+            }
+        });
+        let result_1 = xml_string_to_json(String::from(xml), &Config::new_with_defaults());
+        assert_eq!(expected_1, result_1.unwrap());
+
+        // test with custom config values
+        let expected_2 = json!({
+            "a": {
+                "attr1":"val1",
+                "text":"some text"
+            }
+        });
+        let conf = Config::new_with_custom_values(true, "", "text");
+        let result_2 = xml_string_to_json(String::from(xml), &conf);
+        assert_eq!(expected_2, result_2.unwrap());
+
+        // try the same on XML where the attr and children have a name clash
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="val1"><attr1><nested>some text</nested></attr1></a>"#;
+        let expected_3 = json!({"a":{"attr1":["val1",{"nested":"some text"}]}});
+
+        let result_3 = xml_string_to_json(String::from(xml), &conf);
+        assert_eq!(expected_3, result_3.unwrap());
+    }
+
+    #[test]
+    fn test_malformed_xml() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="val1">some text<b></a>"#;
+
+        let result_1 = xml_string_to_json(String::from(xml), &Config::new_with_defaults());
+        assert!(result_1.is_err());
+    }
+
+    #[test]
+    fn test_parse_text() {
+        assert_eq!(0.0, parse_text("0.0", true));
+        assert_eq!(0, parse_text("0", true));
+        assert_eq!(0.42, parse_text("0.4200", true));
+        assert_eq!(142.42, parse_text("142.4200", true));
+        assert_eq!("0xAC", parse_text("0xAC", true));
+        assert_eq!("0x03", parse_text("0x03", true));
+        assert_eq!("142,4200", parse_text("142,4200", true));
+        assert_eq!("142,420,0", parse_text("142,420,0", true));
+        assert_eq!("142,420,0.0", parse_text("142,420,0.0", true));
+        assert_eq!("0Test", parse_text("0Test", true));
+        assert_eq!("0.Test", parse_text("0.Test", true));
+        assert_eq!("0.22Test", parse_text("0.22Test", true));
+        assert_eq!("0044951", parse_text("0044951", true));
+        assert_eq!(1, parse_text("1", true));
+        assert_eq!(false, parse_text("false", true));
+        assert_eq!(true, parse_text("true", true));
+        assert_eq!("True", parse_text("True", true));
     }
 }
