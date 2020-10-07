@@ -61,7 +61,7 @@ is converted into
 - XML namespace definitions are dropped. E.g. `<Tests xmlns="http://www.adatum.com" />` becomes `"Tests":{}`
 - Processing instructions, comments and DTD are ignored
 - **Presence of CDATA results in incorrect JSON**
-- Attributes can be prefixed via `Config::xml_attr_prefix`. E.g. using the default prefix `@` converts `<a b="y">` into `"a": {"@b":"y"}`. You can use no prefix or set your own value. 
+- Attributes can be prefixed via `Config::xml_attr_prefix`. E.g. using the default prefix `@` converts `<a b="y" />` into `"a": {"@b":"y"}`. You can use no prefix or set your own value. 
 - Complex elements with text nodes put the text node value into a property named in `Config::xml_text_node_prop_name`. E.g. setting `xml_text_node_prop_name` to `text` will convert
 ```<CardNumber Month="3" Year="19">134567/CardNumber>```
 into
@@ -69,7 +69,7 @@ into
 "CardNumber": {
         "Month": 3,
         "Year": 19,
-        "text": 1342260649
+        "text": 1234567
       }
 ```
 - Elements with identical names are collected into arrays. E.g.
