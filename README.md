@@ -31,9 +31,10 @@ The following config example changes the default behavior to:
 1. Treat numbers starting with `0` as strings. E.g. `007` will be `"007"`
 2. Do not prefix properties created from attributes
 3. Use `text` as the property name for values of XML text nodes where the text is mixed with other nodes
+4. Exclude empty elements from the output
 
 ```
-let conf = Config::new_with_custom_values(true, "", "text");
+let conf = Config::new_with_custom_values(true, "", "text", NullValue::Ignore);
 ```
 
 See embedded docs for `Config` struct for more details. 

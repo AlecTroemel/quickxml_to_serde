@@ -14,7 +14,7 @@
 //! ## Usage example
 //! ```no_run
 //! extern crate quickxml_to_serde;
-//! use quickxml_to_serde::{xml_string_to_json, Config};
+//! use quickxml_to_serde::{xml_string_to_json, Config, NullValue};
 //!
 //! fn main() {
 //!    let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="1"><b><c attr2="001">some text</c></b></a>"#;
@@ -22,7 +22,7 @@
 //!    let json = xml_string_to_json(xml.to_owned(), &conf);
 //!    println!("{}", json.expect("Invalid XML").to_string());
 //!
-//!    let conf = Config::new_with_custom_values(true, "", "txt");
+//!    let conf = Config::new_with_custom_values(true, "", "txt", NullValue::Null);
 //!    let json = xml_string_to_json(xml.to_owned(), &conf);
 //!    println!("{}", json.expect("Invalid XML").to_string());
 //! }
@@ -40,8 +40,21 @@ use minidom::{Element, Error};
 use serde_json::{Map, Number, Value};
 use std::str::FromStr;
 
+/// Defines how empty elements like `<x />` should be handled.
+/// `Ignore` -> exclude from JSON, `Null` -> `"x":null`, EmptyObject -> `"x":{}`.
+/// `EmptyObject` is the default option and is how it was handled prior to v.0.4
+/// Using `Ignore` on an XML document with an empty root element falls back to `Null` option.
+/// E.g. both `<a><x/></a>` and `<a/>` are converted into `{"a":null}`.
+#[derive(Debug)]
+pub enum NullValue {
+    Ignore,
+    Null,
+    EmptyObject,
+}
+
 /// Tells the converter how to perform certain conversions.
 /// See docs for individual fields for more info.
+#[derive(Debug)]
 pub struct Config {
     /// Numeric values starting with 0 will be treated as strings.
     /// E.g. `<agent>007</agent>` will become `"agent":"007"`, while
@@ -58,6 +71,8 @@ pub struct Config {
     /// name of the element. E.g. <x>Goodbye!</x>` becomes `{"x":"Goodbye!"}`
     /// Defaults to `#text`
     pub xml_text_node_prop_name: String,
+    /// Defines how empty elements like `<x />` should be handled.
+    pub empty_element_handling: NullValue,
 }
 
 impl Config {
@@ -69,6 +84,7 @@ impl Config {
             leading_zero_as_string: false,
             xml_attr_prefix: "@".to_owned(),
             xml_text_node_prop_name: "#text".to_owned(),
+            empty_element_handling: NullValue::EmptyObject,
         }
     }
 
@@ -77,12 +93,20 @@ impl Config {
         leading_zero_as_string: bool,
         xml_attr_prefix: &str,
         xml_text_node_prop_name: &str,
+        empty_element_handling: NullValue,
     ) -> Self {
         Config {
             leading_zero_as_string,
             xml_attr_prefix: xml_attr_prefix.to_owned(),
             xml_text_node_prop_name: xml_text_node_prop_name.to_owned(),
+            empty_element_handling,
         }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config::new_with_defaults()
     }
 }
 
@@ -117,8 +141,11 @@ fn parse_text(text: &str, leading_zero_as_string: bool) -> Value {
     Value::String(text.into())
 }
 
+/// Convert an XML Element into a JSON property
 fn convert_node(el: &Element, config: &Config) -> Option<Value> {
+    // is it an element with text?
     if el.text().trim() != "" {
+        // does it have attributes?
         if el.attrs().count() > 0 {
             Some(Value::Object(
                 el.attrs()
@@ -138,6 +165,7 @@ fn convert_node(el: &Element, config: &Config) -> Option<Value> {
             Some(parse_text(&el.text()[..], config.leading_zero_as_string))
         }
     } else {
+        // this element has no text, but may have other child nodes
         let mut data = Map::new();
 
         for (k, v) in el.attrs() {
@@ -147,6 +175,7 @@ fn convert_node(el: &Element, config: &Config) -> Option<Value> {
             );
         }
 
+        // process child element recursively
         for child in el.children() {
             match convert_node(child, config) {
                 Some(val) => {
@@ -171,7 +200,17 @@ fn convert_node(el: &Element, config: &Config) -> Option<Value> {
             }
         }
 
-        Some(Value::Object(data))
+        // return the JSON object if it's not empty
+        if !data.is_empty() {
+            return Some(Value::Object(data));
+        }
+
+        // empty objects are treated according to config rules set by the caller
+        match config.empty_element_handling {
+            NullValue::Null => Some(Value::Null),
+            NullValue::EmptyObject => Some(Value::Object(data)),
+            NullValue::Ignore => None,
+        }
     }
 }
 
@@ -213,6 +252,40 @@ mod tests {
     }
 
     #[test]
+    fn test_empty_elements_valid() {
+        let mut conf = Config::new_with_custom_values(true, "", "text", NullValue::EmptyObject);
+        let xml = r#"<a b="1"><x/></a>"#;
+
+        let expected = json!({ "a": {"b":1, "x":{}} });
+        let result = xml_string_to_json(xml.to_owned(), &conf);
+        assert_eq!(expected, result.unwrap());
+
+        conf.empty_element_handling = NullValue::Null;
+        let expected = json!({ "a": {"b":1, "x":null} });
+        let result = xml_string_to_json(xml.to_owned(), &conf);
+        assert_eq!(expected, result.unwrap());
+
+        conf.empty_element_handling = NullValue::Ignore;
+        let expected = json!({ "a": {"b":1} });
+        let result = xml_string_to_json(xml.to_owned(), &conf);
+        assert_eq!(expected, result.unwrap());
+    }
+
+    #[test]
+    fn test_empty_elements_invalid() {
+        let conf = Config::new_with_custom_values(true, "", "text", NullValue::Ignore);
+        let expected = json!({ "a": null });
+
+        let xml = r#"<a><x/></a>"#;
+        let result = xml_string_to_json(xml.to_owned(), &conf);
+        assert_eq!(expected, result.unwrap());
+
+        let xml = r#"<a />"#;
+        let result = xml_string_to_json(xml.to_owned(), &conf);
+        assert_eq!(expected, result.unwrap());
+    }
+
+    #[test]
     fn test_mixed_nodes() {
         let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="val1">some text</a>"#;
 
@@ -233,7 +306,7 @@ mod tests {
                 "text":"some text"
             }
         });
-        let conf = Config::new_with_custom_values(true, "", "text");
+        let conf = Config::new_with_custom_values(true, "", "text", NullValue::Null);
         let result_2 = xml_string_to_json(String::from(xml), &conf);
         assert_eq!(expected_2, result_2.unwrap());
 
@@ -285,7 +358,7 @@ mod tests {
 
         entries.sort();
 
-        let conf = Config::new_with_custom_values(true, "", "text");
+        let conf = Config::new_with_custom_values(true, "", "text", NullValue::Null);
 
         for mut entry in entries {
             // only XML files should be processed
