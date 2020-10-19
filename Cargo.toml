@@ -4,7 +4,7 @@ version = "0.4.1"
 authors = ["Alec Troemel <alec@mirusresearch.com>", "Max Voskob <max@onebro.me>"]
 description = "Convert between XML JSON using quickxml and serde"
 repository = "https://github.com/AlecTroemel/quickxml_to_serde"
-keywords = ["json", "xml", "xml2json", "xml_to_json", "xml to json"]
+keywords = ["json", "xml", "xml2json", "xml_to_json"]
 license = "MIT"
 
 [dependencies]
