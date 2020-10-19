@@ -2,7 +2,7 @@
 //! Fast and flexible conversion from XML to JSON using [quick-xml](https://github.com/tafia/quick-xml)
 //! and [serde](https://github.com/serde-rs/json). Inspired by [node2object](https://github.com/vorot93/node2object).
 //!
-//! This crate converts XML elements, attributes and text nodes directly into a corresponding JSON structure.
+//! This crate converts XML elements, attributes and text nodes directly into corresponding JSON structures.
 //! Some common usage scenarios would be converting XML into JSON for loading into No-SQL databases
 //! or sending it to the front end application.
 //!
@@ -20,18 +20,23 @@
 //!    let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="1"><b><c attr2="001">some text</c></b></a>"#;
 //!    let conf = Config::new_with_defaults();
 //!    let json = xml_string_to_json(xml.to_owned(), &conf);
-//!    println!("{}", json.expect("Invalid XML").to_string());
+//!    println!("{}", json.expect("Malformed XML").to_string());
 //!
 //!    let conf = Config::new_with_custom_values(true, "", "txt", NullValue::Null);
 //!    let json = xml_string_to_json(xml.to_owned(), &conf);
-//!    println!("{}", json.expect("Invalid XML").to_string());
+//!    println!("{}", json.expect("Malformed XML").to_string());
 //! }
 //! ```
-//! * **Output with default config:** `{"a":{"@attr1":1,"b":{"c":{"#text":"some text","@attr2":1}}}}`
-//! * **Output with custom config:** `{"a":{"attr1":1,"b":{"c":{"attr2":"001","txt":"some text"}}}}`
+//! * **Output with the default config:** `{"a":{"@attr1":1,"b":{"c":{"#text":"some text","@attr2":1}}}}`
+//! * **Output with a custom config:** `{"a":{"attr1":1,"b":{"c":{"attr2":"001","txt":"some text"}}}}`
 //!
 //! ## Detailed documentation
 //! See [README](https://github.com/AlecTroemel/quickxml_to_serde) in the source repo for more examples, limitations and detailed behavior description.
+//!
+//! ## Testing your XML files
+//!
+//! If you want to see how your XML files are converted into JSON, place them into `./test_xml_files` directory
+//! and run `cargo test`. They will be converted into JSON and saved in the saved directory.
 
 extern crate minidom;
 extern crate serde_json;
@@ -63,11 +68,12 @@ pub struct Config {
     pub leading_zero_as_string: bool,
     /// Prefix XML attribute names with this value to distinguish them from XML elements.
     /// E.g. set it to `@` for `<x a="Hello!" />` to become `{"x": {"@a":"Hello!"}}`
+    /// or set it to a blank string for `{"x": {"a":"Hello!"}}`
     /// Defaults to `@`.
     pub xml_attr_prefix: String,
-    /// A property name XML text nodes.
+    /// A property name for XML text nodes.
     /// E.g. set it to `text` for `<x a="Hello!">Goodbye!</x>` to become `{"x": {"@a":"Hello!", "text":"Goodbye!"}}`
-    /// XML nodes with text only and no attributes or no child elements are converted into props with the
+    /// XML nodes with text only and no attributes or no child elements are converted into JSON properties with the
     /// name of the element. E.g. <x>Goodbye!</x>` becomes `{"x":"Goodbye!"}`
     /// Defaults to `#text`
     pub xml_text_node_prop_name: String,
@@ -78,7 +84,7 @@ pub struct Config {
 impl Config {
     /// Numbers with leading zero will be treated as numbers.
     /// Prefix XML Attribute names with `@`
-    /// Name XML text nodes `#text` for nodes with other children
+    /// Name XML text nodes `#text` for XML Elements with other children
     pub fn new_with_defaults() -> Self {
         Config {
             leading_zero_as_string: false,
@@ -88,7 +94,7 @@ impl Config {
         }
     }
 
-    /// Create a Config object with non-default values. See the struct docs for more info.
+    /// Create a Config object with non-default values. See the `Config` struct docs for more info.
     pub fn new_with_custom_values(
         leading_zero_as_string: bool,
         xml_attr_prefix: &str,
@@ -110,7 +116,7 @@ impl Default for Config {
     }
 }
 
-/// Returns the text as one of serde::Value types: int, float, bool or string.
+/// Returns the text as one of `serde::Value` types: int, float, bool or string.
 fn parse_text(text: &str, leading_zero_as_string: bool) -> Value {
     let text = text.trim();
 
@@ -141,7 +147,7 @@ fn parse_text(text: &str, leading_zero_as_string: bool) -> Value {
     Value::String(text.into())
 }
 
-/// Convert an XML Element into a JSON property
+/// Converts an XML Element into a JSON property
 fn convert_node(el: &Element, config: &Config) -> Option<Value> {
     // is it an element with text?
     if el.text().trim() != "" {
@@ -223,7 +229,7 @@ fn xml_to_map(e: &Element, config: &Config) -> Value {
     Value::Object(data)
 }
 
-/// Converts the given XML string into serde::Value using settings from `Config`.
+/// Converts the given XML string into `serde::Value` using settings from `Config` struct.
 pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> {
     let root = Element::from_str(xml.as_str())?;
     Ok(xml_to_map(&root, config))
@@ -347,6 +353,9 @@ mod tests {
         assert_eq!("True", parse_text("True", true));
     }
 
+    /// A shortcut for testing the conversion using XML files.
+    /// Place your XML files in `./test_xml_files` directory and run `cargo test`.
+    /// They will be converted into JSON and saved in the saved directory.
     #[test]
     fn convert_test_files() {
         // get the list of files in the text directory
