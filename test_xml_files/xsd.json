@@ -1,0 +1,197 @@
+{
+  "schema": {
+    "complexType": [
+      {
+        "attribute": {
+          "name": "CustomerID",
+          "type": "xs:token"
+        },
+        "name": "CustomerType",
+        "sequence": {
+          "element": [
+            {
+              "name": "CompanyName",
+              "type": "xs:string"
+            },
+            {
+              "name": "ContactName",
+              "type": "xs:string"
+            },
+            {
+              "name": "ContactTitle",
+              "type": "xs:string"
+            },
+            {
+              "name": "Phone",
+              "type": "xs:string"
+            },
+            {
+              "minOccurs": 0,
+              "name": "Fax",
+              "type": "xs:string"
+            },
+            {
+              "name": "FullAddress",
+              "type": "AddressType"
+            }
+          ]
+        }
+      },
+      {
+        "attribute": {
+          "name": "CustomerID",
+          "type": "xs:token"
+        },
+        "name": "AddressType",
+        "sequence": {
+          "element": [
+            {
+              "name": "Address",
+              "type": "xs:string"
+            },
+            {
+              "name": "City",
+              "type": "xs:string"
+            },
+            {
+              "name": "Region",
+              "type": "xs:string"
+            },
+            {
+              "name": "PostalCode",
+              "type": "xs:string"
+            },
+            {
+              "name": "Country",
+              "type": "xs:string"
+            }
+          ]
+        }
+      },
+      {
+        "name": "OrderType",
+        "sequence": {
+          "element": [
+            {
+              "name": "CustomerID",
+              "type": "xs:token"
+            },
+            {
+              "name": "EmployeeID",
+              "type": "xs:token"
+            },
+            {
+              "name": "OrderDate",
+              "type": "xs:dateTime"
+            },
+            {
+              "name": "RequiredDate",
+              "type": "xs:dateTime"
+            },
+            {
+              "name": "ShipInfo",
+              "type": "ShipInfoType"
+            }
+          ]
+        }
+      },
+      {
+        "attribute": {
+          "name": "ShippedDate",
+          "type": "xs:dateTime"
+        },
+        "name": "ShipInfoType",
+        "sequence": {
+          "element": [
+            {
+              "name": "ShipVia",
+              "type": "xs:integer"
+            },
+            {
+              "name": "Freight",
+              "type": "xs:decimal"
+            },
+            {
+              "name": "ShipName",
+              "type": "xs:string"
+            },
+            {
+              "name": "ShipAddress",
+              "type": "xs:string"
+            },
+            {
+              "name": "ShipCity",
+              "type": "xs:string"
+            },
+            {
+              "name": "ShipRegion",
+              "type": "xs:string"
+            },
+            {
+              "name": "ShipPostalCode",
+              "type": "xs:string"
+            },
+            {
+              "name": "ShipCountry",
+              "type": "xs:string"
+            }
+          ]
+        }
+      }
+    ],
+    "element": {
+      "complexType": {
+        "sequence": {
+          "element": [
+            {
+              "complexType": {
+                "sequence": {
+                  "element": {
+                    "maxOccurs": "unbounded",
+                    "minOccurs": 0,
+                    "name": "Customer",
+                    "type": "CustomerType"
+                  }
+                }
+              },
+              "name": "Customers"
+            },
+            {
+              "complexType": {
+                "sequence": {
+                  "element": {
+                    "maxOccurs": "unbounded",
+                    "minOccurs": 0,
+                    "name": "Order",
+                    "type": "OrderType"
+                  }
+                }
+              },
+              "name": "Orders"
+            }
+          ]
+        }
+      },
+      "key": {
+        "field": {
+          "xpath": "@CustomerID"
+        },
+        "name": "CustomerIDKey",
+        "selector": {
+          "xpath": "Customers/Customer"
+        }
+      },
+      "keyref": {
+        "field": {
+          "xpath": "CustomerID"
+        },
+        "name": "CustomerIDKeyRef",
+        "refer": "CustomerIDKey",
+        "selector": {
+          "xpath": "Orders/Order"
+        }
+      },
+      "name": "Root"
+    }
+  }
+}
