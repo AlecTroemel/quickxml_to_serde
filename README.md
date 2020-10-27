@@ -35,7 +35,7 @@ The following config example changes the default behavior to:
 4. Exclude empty elements from the output
 
 ```rust
-let conf = Config::new_with_custom_values(JsonType::StringIfLeadingZero, "", "text", NullValue::Ignore);
+let conf = Config::new_with_custom_values(true, "", "text", NullValue::Ignore);
 ```
 
 #### Enforcing JSON types
@@ -66,11 +66,11 @@ Sample XML document:
 ```xml
 <a attr1="007"><b attr1="7">true</b></a>
 ```
-Configuration to make attribute `attr1="007"` always come out as JSON string:
+Configuration to make attribute `attr1="007"` always come out as a JSON string:
 ```rust
 let conf = Config::new_with_defaults().add_json_type_override("/a/@attr1", JsonType::AlwaysString);
 ```
-Configuration to make both attributes and the text node of `<b />` always come out as JSON string:
+Configuration to make both attributes and the text node of `<b />` always come out as a JSON string:
 ```rust
 let conf = Config::new_with_defaults()
           .add_json_type_override("/a/@attr1", JsonType::AlwaysString)

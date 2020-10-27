@@ -14,7 +14,7 @@
 //! ## Usage example
 //! ```
 //! extern crate quickxml_to_serde;
-//! use quickxml_to_serde::{xml_string_to_json, Config, NullValue, JsonType};
+//! use quickxml_to_serde::{xml_string_to_json, Config, NullValue};
 //!
 //! fn main() {
 //!    let xml = r#"<a attr1="1"><b><c attr2="001">some text</c></b></a>"#;
@@ -22,7 +22,7 @@
 //!    let json = xml_string_to_json(xml.to_owned(), &conf);
 //!    println!("{}", json.expect("Malformed XML").to_string());
 //!
-//!    let conf = Config::new_with_custom_values(JsonType::StringIfLeadingZero, "", "txt", NullValue::Null);
+//!    let conf = Config::new_with_custom_values(true, "", "txt", NullValue::Null);
 //!    let json = xml_string_to_json(xml.to_owned(), &conf);
 //!    println!("{}", json.expect("Malformed XML").to_string());
 //! }
@@ -77,10 +77,6 @@ pub enum NullValue {
 /// be applied.
 #[derive(Debug, PartialEq)]
 pub enum JsonType {
-    /// Numeric values with leading zeros will be converted to JSON strings.
-    /// E.g. convert `<a>001234</a>` into `{"a":"001234"}`. Otherwise it would be converted
-    /// into `{"a":1234}` because it is recognized as an integer.
-    StringIfLeadingZero,
     /// Do not try to infer the type and convert the value to JSON string.
     /// E.g. convert `<a>1234</a>` into `{"a":"1234"}` or `<a>true</a>` into `{"a":"true"}`
     AlwaysString,
@@ -95,10 +91,10 @@ pub enum JsonType {
 /// See docs for individual fields for more info.
 #[derive(Debug)]
 pub struct Config {
-    /// Describes which JSON data types to apply at the document level. It can be overridden at the node level.
+    /// Numeric values starting with 0 will be treated as strings.
     /// E.g. convert `<agent>007</agent>` into `"agent":"007"` or `"agent":7`
-    /// Defaults to `Infer`.
-    pub json_type: JsonType,
+    /// Defaults to `false`.
+    pub leading_zero_as_string: bool,
     /// Prefix XML attribute names with this value to distinguish them from XML elements.
     /// E.g. set it to `@` for `<x a="Hello!" />` to become `{"x": {"@a":"Hello!"}}`
     /// or set it to a blank string for `{"x": {"a":"Hello!"}}`
@@ -130,7 +126,7 @@ impl Config {
     /// Name XML text nodes `#text` for XML Elements with other children
     pub fn new_with_defaults() -> Self {
         Config {
-            json_type: JsonType::Infer,
+            leading_zero_as_string: false,
             xml_attr_prefix: "@".to_owned(),
             xml_text_node_prop_name: "#text".to_owned(),
             empty_element_handling: NullValue::EmptyObject,
@@ -141,13 +137,13 @@ impl Config {
 
     /// Create a Config object with non-default values. See the `Config` struct docs for more info.
     pub fn new_with_custom_values(
-        json_type: JsonType,
+        leading_zero_as_string: bool,
         xml_attr_prefix: &str,
         xml_text_node_prop_name: &str,
         empty_element_handling: NullValue,
     ) -> Self {
         Config {
-            json_type,
+            leading_zero_as_string,
             xml_attr_prefix: xml_attr_prefix.to_owned(),
             xml_text_node_prop_name: xml_text_node_prop_name.to_owned(),
             empty_element_handling,
@@ -182,7 +178,7 @@ impl Default for Config {
 }
 
 /// Returns the text as one of `serde::Value` types: int, float, bool or string.
-fn parse_text(text: &str, json_type: &JsonType) -> Value {
+fn parse_text(text: &str, leading_zero_as_string: bool, json_type: &JsonType) -> Value {
     let text = text.trim();
 
     // make it a string regardless of the underlying type
@@ -193,7 +189,7 @@ fn parse_text(text: &str, json_type: &JsonType) -> Value {
     // ints
     if let Ok(v) = text.parse::<u64>() {
         // don't parse octal numbers and those with leading 0
-        if text.starts_with("0") && json_type == &JsonType::StringIfLeadingZero {
+        if text.starts_with("0") && leading_zero_as_string {
             return Value::String(text.into());
         }
         return Value::Number(Number::from(v));
@@ -227,9 +223,9 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
     let json_type = config
         .json_type_overrides
         .get(&path)
-        .unwrap_or(&config.json_type);
+        .unwrap_or(&JsonType::Infer);
     #[cfg(not(feature = "json_types"))]
-    let json_type = &config.json_type;
+    let json_type = &JsonType::Infer;
 
     // is it an element with text?
     if el.text().trim() != "" {
@@ -246,20 +242,24 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
                         let json_type = config
                             .json_type_overrides
                             .get(&path)
-                            .unwrap_or(&config.json_type);
+                            .unwrap_or(&JsonType::Infer);
                         (
                             [config.xml_attr_prefix.clone(), k.to_owned()].concat(),
-                            parse_text(&v, json_type),
+                            parse_text(&v, config.leading_zero_as_string, json_type),
                         )
                     })
                     .chain(vec![(
                         config.xml_text_node_prop_name.clone(),
-                        parse_text(&el.text()[..], json_type),
+                        parse_text(&el.text()[..], config.leading_zero_as_string, json_type),
                     )])
                     .collect(),
             ))
         } else {
-            Some(parse_text(&el.text()[..], json_type))
+            Some(parse_text(
+                &el.text()[..],
+                config.leading_zero_as_string,
+                json_type,
+            ))
         }
     } else {
         // this element has no text, but may have other child nodes
@@ -274,10 +274,10 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
             let json_type = config
                 .json_type_overrides
                 .get(&path)
-                .unwrap_or(&config.json_type);
+                .unwrap_or(&JsonType::Infer);
             data.insert(
                 [config.xml_attr_prefix.clone(), k.to_owned()].concat(),
-                parse_text(&v, json_type),
+                parse_text(&v, config.leading_zero_as_string, json_type),
             );
         }
 
@@ -359,12 +359,7 @@ mod tests {
 
     #[test]
     fn test_empty_elements_valid() {
-        let mut conf = Config::new_with_custom_values(
-            JsonType::StringIfLeadingZero,
-            "",
-            "text",
-            NullValue::EmptyObject,
-        );
+        let mut conf = Config::new_with_custom_values(true, "", "text", NullValue::EmptyObject);
         let xml = r#"<a b="1"><x/></a>"#;
 
         let expected = json!({ "a": {"b":1, "x":{}} });
@@ -384,12 +379,7 @@ mod tests {
 
     #[test]
     fn test_empty_elements_invalid() {
-        let conf = Config::new_with_custom_values(
-            JsonType::StringIfLeadingZero,
-            "",
-            "text",
-            NullValue::Ignore,
-        );
+        let conf = Config::new_with_custom_values(true, "", "text", NullValue::Ignore);
         let expected = json!({ "a": null });
 
         let xml = r#"<a><x/></a>"#;
@@ -422,12 +412,7 @@ mod tests {
                 "text":"some text"
             }
         });
-        let conf = Config::new_with_custom_values(
-            JsonType::StringIfLeadingZero,
-            "",
-            "text",
-            NullValue::Null,
-        );
+        let conf = Config::new_with_custom_values(true, "", "text", NullValue::Null);
         let result_2 = xml_string_to_json(String::from(xml), &conf);
         assert_eq!(expected_2, result_2.unwrap());
 
@@ -531,50 +516,38 @@ mod tests {
 
     #[test]
     fn test_parse_text() {
-        assert_eq!(0.0, parse_text("0.0", &JsonType::Infer));
-        assert_eq!(0, parse_text("0", &JsonType::Infer));
-        assert_eq!(0, parse_text("0000", &JsonType::Infer));
-        assert_eq!("0", parse_text("0", &JsonType::StringIfLeadingZero));
-        assert_eq!("0000", parse_text("0000", &JsonType::StringIfLeadingZero));
-        assert_eq!(0.42, parse_text("0.4200", &JsonType::Infer));
-        assert_eq!(142.42, parse_text("142.4200", &JsonType::Infer));
-        assert_eq!("0xAC", parse_text("0xAC", &JsonType::StringIfLeadingZero));
-        assert_eq!("0x03", parse_text("0x03", &JsonType::StringIfLeadingZero));
-        assert_eq!(
-            "142,4200",
-            parse_text("142,4200", &JsonType::StringIfLeadingZero)
-        );
-        assert_eq!(
-            "142,420,0",
-            parse_text("142,420,0", &JsonType::StringIfLeadingZero)
-        );
+        assert_eq!(0.0, parse_text("0.0", false, &JsonType::Infer));
+        assert_eq!(0, parse_text("0", false, &JsonType::Infer));
+        assert_eq!(0, parse_text("0000", false, &JsonType::Infer));
+        assert_eq!("0", parse_text("0", true, &JsonType::Infer));
+        assert_eq!("0000", parse_text("0000", true, &JsonType::Infer));
+        assert_eq!(0.42, parse_text("0.4200", false, &JsonType::Infer));
+        assert_eq!(142.42, parse_text("142.4200", false, &JsonType::Infer));
+        assert_eq!("0xAC", parse_text("0xAC", true, &JsonType::Infer));
+        assert_eq!("0x03", parse_text("0x03", true, &JsonType::Infer));
+        assert_eq!("142,4200", parse_text("142,4200", true, &JsonType::Infer));
+        assert_eq!("142,420,0", parse_text("142,420,0", true, &JsonType::Infer));
         assert_eq!(
             "142,420,0.0",
-            parse_text("142,420,0.0", &JsonType::StringIfLeadingZero)
+            parse_text("142,420,0.0", true, &JsonType::Infer)
         );
-        assert_eq!("0Test", parse_text("0Test", &JsonType::StringIfLeadingZero));
-        assert_eq!(
-            "0.Test",
-            parse_text("0.Test", &JsonType::StringIfLeadingZero)
-        );
-        assert_eq!(
-            "0.22Test",
-            parse_text("0.22Test", &JsonType::StringIfLeadingZero)
-        );
-        assert_eq!(
-            "0044951",
-            parse_text("0044951", &JsonType::StringIfLeadingZero)
-        );
-        assert_eq!(1, parse_text("1", &JsonType::StringIfLeadingZero));
-        assert_eq!(false, parse_text("false", &JsonType::Infer));
-        assert_eq!(true, parse_text("true", &JsonType::StringIfLeadingZero));
-        assert_eq!("True", parse_text("True", &JsonType::StringIfLeadingZero));
+        assert_eq!("0Test", parse_text("0Test", true, &JsonType::Infer));
+        assert_eq!("0.Test", parse_text("0.Test", true, &JsonType::Infer));
+        assert_eq!("0.22Test", parse_text("0.22Test", true, &JsonType::Infer));
+        assert_eq!("0044951", parse_text("0044951", true, &JsonType::Infer));
+        assert_eq!(1, parse_text("1", true, &JsonType::Infer));
+        assert_eq!(false, parse_text("false", false, &JsonType::Infer));
+        assert_eq!(true, parse_text("true", true, &JsonType::Infer));
+        assert_eq!("True", parse_text("True", true, &JsonType::Infer));
         // always enforce string JSON type
-        assert_eq!("abc", parse_text("abc", &JsonType::AlwaysString));
-        assert_eq!("true", parse_text("true", &JsonType::AlwaysString));
-        assert_eq!("123", parse_text("123", &JsonType::AlwaysString));
-        assert_eq!("0123", parse_text("0123", &JsonType::AlwaysString));
-        assert_eq!("0.4200", parse_text("0.4200", &JsonType::AlwaysString));
+        assert_eq!("abc", parse_text("abc", false, &JsonType::AlwaysString));
+        assert_eq!("true", parse_text("true", false, &JsonType::AlwaysString));
+        assert_eq!("123", parse_text("123", false, &JsonType::AlwaysString));
+        assert_eq!("0123", parse_text("0123", false, &JsonType::AlwaysString));
+        assert_eq!(
+            "0.4200",
+            parse_text("0.4200", false, &JsonType::AlwaysString)
+        );
     }
 
     /// A shortcut for testing the conversion using XML files.
@@ -591,12 +564,7 @@ mod tests {
 
         entries.sort();
 
-        let conf = Config::new_with_custom_values(
-            JsonType::StringIfLeadingZero,
-            "",
-            "text",
-            NullValue::Null,
-        );
+        let conf = Config::new_with_custom_values(true, "", "text", NullValue::Null);
 
         for mut entry in entries {
             // only XML files should be processed
