@@ -189,7 +189,8 @@ fn parse_text(text: &str, leading_zero_as_string: bool, json_type: &JsonType) ->
     // ints
     if let Ok(v) = text.parse::<u64>() {
         // don't parse octal numbers and those with leading 0
-        // text value "0" will be converted into number 0
+        // `text` value "0" will always be converted into number 0, "0000" may be converted
+        // into 0 or "0000" depending on `leading_zero_as_string`
         if leading_zero_as_string && text.starts_with("0") && (v != 0 || text.len() > 1) {
             return Value::String(text.into());
         }
