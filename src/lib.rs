@@ -12,12 +12,12 @@
 //! - number format conversion
 //!
 //! ## Usage example
-//! ```no_run
+//! ```
 //! extern crate quickxml_to_serde;
 //! use quickxml_to_serde::{xml_string_to_json, Config, NullValue, JsonType};
 //!
 //! fn main() {
-//!    let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="1"><b><c attr2="001">some text</c></b></a>"#;
+//!    let xml = r#"<a attr1="1"><b><c attr2="001">some text</c></b></a>"#;
 //!    let conf = Config::new_with_defaults();
 //!    let json = xml_string_to_json(xml.to_owned(), &conf);
 //!    println!("{}", json.expect("Malformed XML").to_string());
@@ -29,6 +29,17 @@
 //! ```
 //! * **Output with the default config:** `{"a":{"@attr1":1,"b":{"c":{"#text":"some text","@attr2":1}}}}`
 //! * **Output with a custom config:** `{"a":{"attr1":1,"b":{"c":{"attr2":"001","txt":"some text"}}}}`
+//!
+//! ## Additional features
+//! Use `quickxml_to_serde = { version = "0.4", features = ["json_types"] }` to enable support for enforcing JSON types     
+//! for some XML nodes using xPath-like notations. Example for enforcing attribute `attr2` from the snippet above
+//! as JSON String regardless of its contents:
+//! ```
+//! use quickxml_to_serde::{Config, JsonType};
+//!
+//! #[cfg(feature = "json_types")]
+//! let conf = Config::new_with_defaults().add_json_type_override("/a/b/c/@attr2", JsonType::AlwaysString);
+//! ```
 //!
 //! ## Detailed documentation
 //! See [README](https://github.com/AlecTroemel/quickxml_to_serde) in the source repo for more examples, limitations and detailed behavior description.
@@ -43,6 +54,7 @@ extern crate serde_json;
 
 use minidom::{Element, Error};
 use serde_json::{Map, Number, Value};
+#[cfg(feature = "json_types")]
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -108,6 +120,7 @@ pub struct Config {
     /// - **XML**: `<a><b c="123">007</b></a>`
     /// - path for `c`: `/a/b/@c`
     /// - path for `b` text node (007): `/a/b`
+    #[cfg(feature = "json_types")]
     pub json_type_overrides: HashMap<String, JsonType>,
 }
 
@@ -121,6 +134,7 @@ impl Config {
             xml_attr_prefix: "@".to_owned(),
             xml_text_node_prop_name: "#text".to_owned(),
             empty_element_handling: NullValue::EmptyObject,
+            #[cfg(feature = "json_types")]
             json_type_overrides: HashMap::new(),
         }
     }
@@ -137,6 +151,7 @@ impl Config {
             xml_attr_prefix: xml_attr_prefix.to_owned(),
             xml_text_node_prop_name: xml_text_node_prop_name.to_owned(),
             empty_element_handling,
+            #[cfg(feature = "json_types")]
             json_type_overrides: HashMap::new(),
         }
     }
@@ -147,6 +162,7 @@ impl Config {
     /// - path for `c`: `/a/b/@c`
     /// - path for `b` text node (007): `/a/b`
     /// This function will add the leading `/` if it's missing.
+    #[cfg(feature = "json_types")]
     pub fn add_json_type_override(self, path: &str, json_type: JsonType) -> Self {
         let mut conf = self;
         let path = if path.starts_with("/") {
@@ -204,12 +220,16 @@ fn parse_text(text: &str, json_type: &JsonType) -> Value {
 /// Converts an XML Element into a JSON property
 fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
     // add the current node to the path
+    #[cfg(feature = "json_types")]
     let path = [path, "/", el.name()].concat();
     // get the json_type for this node
+    #[cfg(feature = "json_types")]
     let json_type = config
         .json_type_overrides
         .get(&path)
         .unwrap_or(&config.json_type);
+    #[cfg(not(feature = "json_types"))]
+    let json_type = &config.json_type;
 
     // is it an element with text?
     if el.text().trim() != "" {
@@ -219,8 +239,10 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
                 el.attrs()
                     .map(|(k, v)| {
                         // add the current node to the path
+                        #[cfg(feature = "json_types")]
                         let path = [path.clone(), "/@".to_owned(), k.to_owned()].concat();
                         // get the json_type for this node
+                        #[cfg(feature = "json_types")]
                         let json_type = config
                             .json_type_overrides
                             .get(&path)
@@ -245,8 +267,10 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
 
         for (k, v) in el.attrs() {
             // add the current node to the path
+            #[cfg(feature = "json_types")]
             let path = [path.clone(), "/@".to_owned(), k.to_owned()].concat();
             // get the json_type for this node
+            #[cfg(feature = "json_types")]
             let json_type = config
                 .json_type_overrides
                 .get(&path)
@@ -415,6 +439,7 @@ mod tests {
         assert_eq!(expected_3, result_3.unwrap());
     }
 
+    #[cfg(feature = "json_types")]
     #[test]
     fn test_add_json_type_override() {
         // check if it adds the leading slash
@@ -428,6 +453,7 @@ mod tests {
         assert!(config.json_type_overrides.get("/a/@attr1").is_some());
     }
 
+    #[cfg(feature = "json_types")]
     #[test]
     fn test_json_type_overrides() {
         let xml = r#"<a attr1="007"><b attr1="7">true</b></a>"#;

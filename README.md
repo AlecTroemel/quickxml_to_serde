@@ -35,16 +35,56 @@ The following config example changes the default behavior to:
 4. Exclude empty elements from the output
 
 ```rust
-let conf = Config::new_with_custom_values(true, "", "text", NullValue::Ignore);
+let conf = Config::new_with_custom_values(JsonType::StringIfLeadingZero, "", "text", NullValue::Ignore);
 ```
 
-See embedded docs for `Config` struct for more details. 
+#### Enforcing JSON types
+
+The default for this library is to attempt to infer scalar data types, which can be `int`, `float`, `bool` or `string` in JSON. Sometimes it is not desirable like in the example below. Let's assume that attribute `id` is always numeric and can be safely converted to JSON integer.
+The `card_number` element looks like a number for the first two users and is a string for the third one. This inconsistency in JSON typing makes it
+difficult to deserialize the structure, so we may be better off telling the converter to use a particular JSON data type for some XML nodes.
+```xml
+<users>
+	<user id="1">
+		<name>Andrew</name>
+		<card_number>000156</card_number>
+	</user>
+	<user id="2">
+		<name>John</name>
+		<card_number>100263</card_number>
+	</user>
+	<user id="3">
+		<name>Mary</name>
+		<card_number>100263a</card_number>
+	</user>
+</users>
+```
+
+Use `quickxml_to_serde = { version = "0.4", features = ["json_types"] }` feature in your *Cargo.toml* file to enable support for enforcing JSON types for some XML nodes using xPath-like notations.
+
+Sample XML document:
+```xml
+<a attr1="007"><b attr1="7">true</b></a>
+```
+Configuration to make attribute `attr1="007"` always come out as JSON string:
+```rust
+let conf = Config::new_with_defaults().add_json_type_override("/a/@attr1", JsonType::AlwaysString);
+```
+Configuration to make both attributes and the text node of `<b />` always come out as JSON string:
+```rust
+let conf = Config::new_with_defaults()
+          .add_json_type_override("/a/@attr1", JsonType::AlwaysString)
+          .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString)
+          .add_json_type_override("/a/b", JsonType::AlwaysString);
+```
+
+See embedded docs for `Config` struct and its members for more details. 
 
 ## Conversion specifics
 
 - The order of XML elements is not preserved
 - Namespace identifiers are dropped. E.g. `<xs:a>123</xs:a>` becomes `{ "a":123 }`
-- Integers and floats are converted into JSON integers and floats. See `Config` members for some fine-tuning.
+- Integers and floats are converted into JSON integers and floats, unless the JSON type is specified in `Config`.
 - XML attributes become JSON properties at the same level as child elements. E.g.
 ```xml
 <Test TestId="0001">
@@ -122,4 +162,4 @@ See `mod tests` inside [lib.rs](src/lib.rs) for more usage examples.
 
 ## Edge cases
 
-XML and JSON are not directly compatible for 1:1 conversion without additional hints to the converter. Feel free to post an issue if you come across one.
+XML and JSON are not directly compatible for 1:1 conversion without additional hints to the converter. Feel free to post an issue if you come across any incorrect conversion.
