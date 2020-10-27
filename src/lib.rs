@@ -43,6 +43,7 @@ extern crate serde_json;
 
 use minidom::{Element, Error};
 use serde_json::{Map, Number, Value};
+use std::collections::HashMap;
 use std::str::FromStr;
 
 /// Defines how empty elements like `<x />` should be handled.
@@ -99,6 +100,15 @@ pub struct Config {
     pub xml_text_node_prop_name: String,
     /// Defines how empty elements like `<x />` should be handled.
     pub empty_element_handling: NullValue,
+    /// A list of XML paths with their JsonType overrides. They take precedence over the document-wide `json_type`
+    /// property. The path syntax is based on xPath: literal element names and attribute names prefixed with `@`.
+    /// The path must start with a leading `/`. It is a bit of an inconvenience to remember about it, but it saves
+    /// an extra `if`-check in the code to improve the performance.
+    /// # Example
+    /// - **XML**: `<a><b c="123">007</b></a>`
+    /// - path for `c`: `/a/b/@c`
+    /// - path for `b` text node (007): `/a/b`
+    pub json_type_overrides: HashMap<String, JsonType>,
 }
 
 impl Config {
@@ -111,6 +121,7 @@ impl Config {
             xml_attr_prefix: "@".to_owned(),
             xml_text_node_prop_name: "#text".to_owned(),
             empty_element_handling: NullValue::EmptyObject,
+            json_type_overrides: HashMap::new(),
         }
     }
 
@@ -126,7 +137,25 @@ impl Config {
             xml_attr_prefix: xml_attr_prefix.to_owned(),
             xml_text_node_prop_name: xml_text_node_prop_name.to_owned(),
             empty_element_handling,
+            json_type_overrides: HashMap::new(),
         }
+    }
+
+    /// Adds a single JSON Type override rule to the current config.
+    /// # Example
+    /// - **XML**: `<a><b c="123">007</b></a>`
+    /// - path for `c`: `/a/b/@c`
+    /// - path for `b` text node (007): `/a/b`
+    /// This function will add the leading `/` if it's missing.
+    pub fn add_json_type_override(self, path: &str, json_type: JsonType) -> Self {
+        let mut conf = self;
+        let path = if path.starts_with("/") {
+            path.to_owned()
+        } else {
+            ["/", path].concat()
+        };
+        conf.json_type_overrides.insert(path, json_type);
+        conf
     }
 }
 
@@ -173,7 +202,15 @@ fn parse_text(text: &str, json_type: &JsonType) -> Value {
 }
 
 /// Converts an XML Element into a JSON property
-fn convert_node(el: &Element, config: &Config) -> Option<Value> {
+fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
+    // add the current node to the path
+    let path = [path, "/", el.name()].concat();
+    // get the json_type for this node
+    let json_type = config
+        .json_type_overrides
+        .get(&path)
+        .unwrap_or(&config.json_type);
+
     // is it an element with text?
     if el.text().trim() != "" {
         // does it have attributes?
@@ -181,34 +218,48 @@ fn convert_node(el: &Element, config: &Config) -> Option<Value> {
             Some(Value::Object(
                 el.attrs()
                     .map(|(k, v)| {
+                        // add the current node to the path
+                        let path = [path.clone(), "/@".to_owned(), k.to_owned()].concat();
+                        // get the json_type for this node
+                        let json_type = config
+                            .json_type_overrides
+                            .get(&path)
+                            .unwrap_or(&config.json_type);
                         (
                             [config.xml_attr_prefix.clone(), k.to_owned()].concat(),
-                            parse_text(&v, &config.json_type),
+                            parse_text(&v, json_type),
                         )
                     })
                     .chain(vec![(
                         config.xml_text_node_prop_name.clone(),
-                        parse_text(&el.text()[..], &config.json_type),
+                        parse_text(&el.text()[..], json_type),
                     )])
                     .collect(),
             ))
         } else {
-            Some(parse_text(&el.text()[..], &config.json_type))
+            Some(parse_text(&el.text()[..], json_type))
         }
     } else {
         // this element has no text, but may have other child nodes
         let mut data = Map::new();
 
         for (k, v) in el.attrs() {
+            // add the current node to the path
+            let path = [path.clone(), "/@".to_owned(), k.to_owned()].concat();
+            // get the json_type for this node
+            let json_type = config
+                .json_type_overrides
+                .get(&path)
+                .unwrap_or(&config.json_type);
             data.insert(
                 [config.xml_attr_prefix.clone(), k.to_owned()].concat(),
-                parse_text(&v, &config.json_type),
+                parse_text(&v, json_type),
             );
         }
 
         // process child element recursively
         for child in el.children() {
-            match convert_node(child, config) {
+            match convert_node(child, config, &path) {
                 Some(val) => {
                     let name = &child.name().to_string();
 
@@ -249,7 +300,7 @@ fn xml_to_map(e: &Element, config: &Config) -> Value {
     let mut data = Map::new();
     data.insert(
         e.name().to_string(),
-        convert_node(&e, &config).unwrap_or(Value::Null),
+        convert_node(&e, &config, &String::new()).unwrap_or(Value::Null),
     );
     Value::Object(data)
 }
@@ -365,6 +416,86 @@ mod tests {
     }
 
     #[test]
+    fn test_add_json_type_override() {
+        // check if it adds the leading slash
+        let config =
+            Config::new_with_defaults().add_json_type_override("a/@attr1", JsonType::AlwaysString);
+        assert!(config.json_type_overrides.get("/a/@attr1").is_some());
+
+        // check if it doesn't add any extra slashes
+        let config =
+            Config::new_with_defaults().add_json_type_override("/a/@attr1", JsonType::AlwaysString);
+        assert!(config.json_type_overrides.get("/a/@attr1").is_some());
+    }
+
+    #[test]
+    fn test_json_type_overrides() {
+        let xml = r#"<a attr1="007"><b attr1="7">true</b></a>"#;
+
+        // test with default config values
+        let expected = json!({
+            "a": {
+                "@attr1":7,
+                "b": {
+                    "@attr1":7,
+                "#text":true
+                }
+            }
+        });
+        let config = Config::new_with_defaults();
+        let result = xml_string_to_json(String::from(xml), &config);
+        assert_eq!(expected, result.unwrap());
+
+        // test with custom config values for 1 attribute
+        let expected = json!({
+            "a": {
+                "@attr1":"007",
+                "b": {
+                    "@attr1":7,
+                "#text":true
+                }
+            }
+        });
+        let conf =
+            Config::new_with_defaults().add_json_type_override("/a/@attr1", JsonType::AlwaysString);
+        let result = xml_string_to_json(String::from(xml), &conf);
+        assert_eq!(expected, result.unwrap());
+
+        // test with custom config values for 2 attributes
+        let expected = json!({
+            "a": {
+                "@attr1":"007",
+                "b": {
+                    "@attr1":"7",
+                "#text":true
+                }
+            }
+        });
+        let conf = Config::new_with_defaults()
+            .add_json_type_override("/a/@attr1", JsonType::AlwaysString)
+            .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString);
+        let result = xml_string_to_json(String::from(xml), &conf);
+        assert_eq!(expected, result.unwrap());
+
+        // test with custom config values for 2 attributes and a text node
+        let expected = json!({
+            "a": {
+                "@attr1":"007",
+                "b": {
+                    "@attr1":"7",
+                "#text":"true"
+                }
+            }
+        });
+        let conf = Config::new_with_defaults()
+            .add_json_type_override("/a/@attr1", JsonType::AlwaysString)
+            .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString)
+            .add_json_type_override("/a/b", JsonType::AlwaysString);
+        let result = xml_string_to_json(String::from(xml), &conf);
+        assert_eq!(expected, result.unwrap());
+    }
+
+    #[test]
     fn test_malformed_xml() {
         let xml = r#"<?xml version="1.0" encoding="utf-8"?><a attr1="val1">some text<b></a>"#;
 
@@ -413,6 +544,7 @@ mod tests {
         assert_eq!(true, parse_text("true", &JsonType::StringIfLeadingZero));
         assert_eq!("True", parse_text("True", &JsonType::StringIfLeadingZero));
         // always enforce string JSON type
+        assert_eq!("abc", parse_text("abc", &JsonType::AlwaysString));
         assert_eq!("true", parse_text("true", &JsonType::AlwaysString));
         assert_eq!("123", parse_text("123", &JsonType::AlwaysString));
         assert_eq!("0123", parse_text("0123", &JsonType::AlwaysString));
