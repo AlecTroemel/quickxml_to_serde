@@ -189,7 +189,8 @@ fn parse_text(text: &str, leading_zero_as_string: bool, json_type: &JsonType) ->
     // ints
     if let Ok(v) = text.parse::<u64>() {
         // don't parse octal numbers and those with leading 0
-        if text.starts_with("0") && leading_zero_as_string {
+        // text value "0" will be converted into number 0
+        if leading_zero_as_string && text.starts_with("0") && (v != 0 || text.len() > 1) {
             return Value::String(text.into());
         }
         return Value::Number(Number::from(v));
@@ -519,7 +520,7 @@ mod tests {
         assert_eq!(0.0, parse_text("0.0", false, &JsonType::Infer));
         assert_eq!(0, parse_text("0", false, &JsonType::Infer));
         assert_eq!(0, parse_text("0000", false, &JsonType::Infer));
-        assert_eq!("0", parse_text("0", true, &JsonType::Infer));
+        assert_eq!(0, parse_text("0", true, &JsonType::Infer));
         assert_eq!("0000", parse_text("0000", true, &JsonType::Infer));
         assert_eq!(0.42, parse_text("0.4200", false, &JsonType::Infer));
         assert_eq!(142.42, parse_text("142.4200", false, &JsonType::Infer));
