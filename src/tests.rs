@@ -207,17 +207,20 @@ fn test_parse_text() {
     assert_eq!("True", parse_text("True", true, &JsonType::Infer));
 
     // always enforce JSON bool type
-    let bool_type = JsonType::Bool(vec!["true", "True", "", "1"]);
-    assert_eq!(false, parse_text("false", false, &bool_type));
-    assert_eq!(true, parse_text("true", false, &bool_type));
-    assert_eq!(true, parse_text("True", false, &bool_type));
-    assert_eq!(false, parse_text("TRUE", false, &bool_type));
-    assert_eq!(true, parse_text("", false, &bool_type));
-    assert_eq!(true, parse_text("1", false, &bool_type));
-    assert_eq!(false, parse_text("0", false, &bool_type));
-    // this is an interesting quirk of &str comparison
-    // any whitespace value == "", at least for Vec::contains() fn
-    assert_eq!(true, parse_text(" ", false, &bool_type)); 
+    #[cfg(feature = "json_types")]
+    {
+        let bool_type = JsonType::Bool(vec!["true", "True", "", "1"]);
+        assert_eq!(false, parse_text("false", false, &bool_type));
+        assert_eq!(true, parse_text("true", false, &bool_type));
+        assert_eq!(true, parse_text("True", false, &bool_type));
+        assert_eq!(false, parse_text("TRUE", false, &bool_type));
+        assert_eq!(true, parse_text("", false, &bool_type));
+        assert_eq!(true, parse_text("1", false, &bool_type));
+        assert_eq!(false, parse_text("0", false, &bool_type));
+        // this is an interesting quirk of &str comparison
+        // any whitespace value == "", at least for Vec::contains() fn
+        assert_eq!(true, parse_text(" ", false, &bool_type));
+    }
 
     // always enforce JSON string type
     assert_eq!("abc", parse_text("abc", false, &JsonType::AlwaysString));

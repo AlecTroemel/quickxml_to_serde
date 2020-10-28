@@ -193,6 +193,7 @@ fn parse_text(text: &str, leading_zero_as_string: bool, json_type: &JsonType) ->
     }
 
     // enforce JSON Bool data type
+    #[cfg(feature = "json_types")]
     if let JsonType::Bool(true_values) = json_type {
         if true_values.contains(&text) {
             // any values matching the `true` list are bool/true
