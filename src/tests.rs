@@ -1,4 +1,3 @@
-
 use super::*;
 use serde_json::{json, to_string_pretty};
 use std::fs::File;
@@ -103,7 +102,7 @@ fn test_add_json_type_override() {
 #[cfg(feature = "json_types")]
 #[test]
 fn test_json_type_overrides() {
-    let xml = r#"<a attr1="007"><b attr1="7">true</b></a>"#;
+    let xml = r#"<a attr1="007"><b attr1="7" attr2="True">true</b></a>"#;
 
     // test with default config values
     let expected = json!({
@@ -111,6 +110,7 @@ fn test_json_type_overrides() {
             "@attr1":7,
             "b": {
                 "@attr1":7,
+                "@attr2":"True",
             "#text":true
             }
         }
@@ -125,6 +125,7 @@ fn test_json_type_overrides() {
             "@attr1":"007",
             "b": {
                 "@attr1":7,
+                "@attr2":"True",
             "#text":true
             }
         }
@@ -134,19 +135,21 @@ fn test_json_type_overrides() {
     let result = xml_string_to_json(String::from(xml), &conf);
     assert_eq!(expected, result.unwrap());
 
-    // test with custom config values for 2 attributes
+    // test with custom config values for 3 attributes
     let expected = json!({
         "a": {
             "@attr1":"007",
             "b": {
                 "@attr1":"7",
+                "@attr2":true,
             "#text":true
             }
         }
     });
     let conf = Config::new_with_defaults()
         .add_json_type_override("/a/@attr1", JsonType::AlwaysString)
-        .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString);
+        .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString)
+        .add_json_type_override("/a/b/@attr2", JsonType::Bool(vec!["True"]));
     let result = xml_string_to_json(String::from(xml), &conf);
     assert_eq!(expected, result.unwrap());
 
@@ -156,6 +159,7 @@ fn test_json_type_overrides() {
             "@attr1":"007",
             "b": {
                 "@attr1":"7",
+                "@attr2":"True",
             "#text":"true"
             }
         }
@@ -201,7 +205,21 @@ fn test_parse_text() {
     assert_eq!(false, parse_text("false", false, &JsonType::Infer));
     assert_eq!(true, parse_text("true", true, &JsonType::Infer));
     assert_eq!("True", parse_text("True", true, &JsonType::Infer));
-    // always enforce string JSON type
+
+    // always enforce JSON bool type
+    let bool_type = JsonType::Bool(vec!["true", "True", "", "1"]);
+    assert_eq!(false, parse_text("false", false, &bool_type));
+    assert_eq!(true, parse_text("true", false, &bool_type));
+    assert_eq!(true, parse_text("True", false, &bool_type));
+    assert_eq!(false, parse_text("TRUE", false, &bool_type));
+    assert_eq!(true, parse_text("", false, &bool_type));
+    assert_eq!(true, parse_text("1", false, &bool_type));
+    assert_eq!(false, parse_text("0", false, &bool_type));
+    // this is an interesting quirk of &str comparison
+    // any whitespace value == "", at least for Vec::contains() fn
+    assert_eq!(true, parse_text(" ", false, &bool_type)); 
+
+    // always enforce JSON string type
     assert_eq!("abc", parse_text("abc", false, &JsonType::AlwaysString));
     assert_eq!("true", parse_text("true", false, &JsonType::AlwaysString));
     assert_eq!("123", parse_text("123", false, &JsonType::AlwaysString));

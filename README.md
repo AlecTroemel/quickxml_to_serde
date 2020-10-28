@@ -38,7 +38,9 @@ The following config example changes the default behavior to:
 let conf = Config::new_with_custom_values(true, "", "text", NullValue::Ignore);
 ```
 
-#### Enforcing JSON types
+## Enforcing JSON types
+
+#### Strings
 
 The default for this library is to attempt to infer scalar data types, which can be `int`, `float`, `bool` or `string` in JSON. Sometimes it is not desirable like in the example below. Let's assume that attribute `id` is always numeric and can be safely converted to JSON integer.
 The `card_number` element looks like a number for the first two users and is a string for the third one. This inconsistency in JSON typing makes it
@@ -76,6 +78,15 @@ let conf = Config::new_with_defaults()
           .add_json_type_override("/a/@attr1", JsonType::AlwaysString)
           .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString)
           .add_json_type_override("/a/b", JsonType::AlwaysString);
+```
+
+#### Boolean
+
+The only two [valid boolean values in JSON](https://json-schema.org/understanding-json-schema/reference/boolean.html#boolean) are `true` and `false`. On the other hand, values such as `True`, `False`,`1` and `0` are common in programming languages and data formats. Use `JsonType::Bool(...)` type with the list of "true" values to convert arbitrary boolean values into JSON bool.
+
+```rust
+let conf = Config::new_with_defaults()
+        .add_json_type_override("/a/b", JsonType::Bool(vec!["True","true","1","yes"]));
 ```
 
 See embedded docs for `Config` struct and its members for more details. 

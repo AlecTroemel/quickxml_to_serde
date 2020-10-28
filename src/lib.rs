@@ -83,6 +83,9 @@ pub enum JsonType {
     /// Do not try to infer the type and convert the value to JSON string.
     /// E.g. convert `<a>1234</a>` into `{"a":"1234"}` or `<a>true</a>` into `{"a":"true"}`
     AlwaysString,
+    /// Convert values included in this member into JSON bool `true` and any other value into `false`.
+    /// E.g. `Bool(vec!["True", "true", "TRUE"]) will result in any of these values to become JSON bool `true`.
+    Bool(Vec<&'static str>),
     /// Attempt to infer the type by looking at the single value of the node being converted.
     /// Not guaranteed to be consistent across multiple nodes.
     /// E.g. convert `<a>1234</a>` and `<a>001234</a>` into `{"a":1234}`, or `<a>true</a>` into `{"a":true}`
@@ -184,9 +187,20 @@ impl Default for Config {
 fn parse_text(text: &str, leading_zero_as_string: bool, json_type: &JsonType) -> Value {
     let text = text.trim();
 
-    // make it a string regardless of the underlying type
+    // enforce JSON String data type regardless of the underlying type
     if json_type == &JsonType::AlwaysString {
         return Value::String(text.into());
+    }
+
+    // enforce JSON Bool data type
+    if let JsonType::Bool(true_values) = json_type {
+        if true_values.contains(&text) {
+            // any values matching the `true` list are bool/true
+            return Value::Bool(true);
+        } else {
+            // anything else is false
+            return Value::Bool(false);
+        }
     }
 
     // ints
