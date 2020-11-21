@@ -1,0 +1,11 @@
+<Root>
+Some text is totally valid here
+  <TaxRate>7.25</TaxRate>
+  <Data>
+  and also at this level, but this mixing of text and elements produces incorrect JSON.
+  See https://github.com/AlecTroemel/quickxml_to_serde/issues/9 for details.
+    <Category>A</Category>
+    <Quantity>3</Quantity>
+    <Price>24.50</Price>
+  </Data>
+</Root>
