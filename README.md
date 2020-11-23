@@ -92,13 +92,63 @@ let conf = Config::new_with_defaults()
 #### Arrays
 
 Multiple nodes with the same name are automatically converted into a JSON array. For example,
-`<a><b>1</b><b>2</b></a>` is converted into `"a": { "b": [1,2] }`, but a single element as in `<a><b>1</b></a>`
-is converted into a scalar value like `"a": { "b": 1 }`. You can use `JsonArray::Always(JsonType::Infer)` to create a JSON array regardless of the number of elements so that `<a><b>1</b></a>` becomes `"a": { "b": [1] }`.
+```xml
+<a>
+  <b>1</b>
+  <b>2</b>
+</a>
+```
+is converted into 
+```json
+{ "a": 
+  { "b": [1,2] }
+}
+```
+By default, a single element like
+```xml
+<a>
+  <b>1</b>
+</a>
+```
+is converted into a scalar value or a map
+```json
+{ "a": 
+  { "b": 1 } 
+}
+```
 
-`JsonArray::Always()` and `JsonArray::Infer()` can specify what underlying JSON type should be used, e.g. `Infer`, `AlwaysString` or `Bool()`.
+You can use `add_json_type_override()` with `JsonArray::Always()` to create a JSON array regardless of the number of elements so that `<a><b>1</b></a>` becomes `{ "a": { "b": [1] } }`.
 
+`JsonArray::Always()` and `JsonArray::Infer()` can specify what underlying JSON type should be used, e.g. 
+* `JsonArray::Infer(JsonType::AlwaysString)` - infer array, convert the values to JSON string
+* `JsonArray::Always(JsonType::Infer)` - always wrap the values in a JSON array, infer the value types
+* `JsonArray::Always(JsonType::AlwaysString)` - always wrap the values in a JSON array and convert values to JSON string
 
-See embedded docs for `Config` struct and its members for more details. 
+```rust
+let config = Config::new_with_defaults()
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::AlwaysString));
+```
+
+**Empty XML nodes cannot be converted to empty arrays**. For example, conversion of `<a><b /></a>` depends on `NullValue` setting.
+```rust
+let config = Config::new_with_custom_values(false, "@", "#text", NullValue::Ignore)
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::Infer));
+```
+converts `<a><b /></a>` to
+```json
+{"a": null}
+```
+and the same `config` with `NullValue::Null` converts it to
+
+```json
+{"a": { "b": [null] }}
+```
+
+It is not possible to get an empty array like `{"a": { "b": [] }}`.
+
+----
+
+*See embedded docs for `Config` struct and its members for more details.*
 
 ## Conversion specifics
 
