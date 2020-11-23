@@ -129,7 +129,7 @@ let config = Config::new_with_defaults()
         .add_json_type_override("/a/b", JsonArray::Always(JsonType::AlwaysString));
 ```
 
-**Empty XML nodes cannot be converted to empty arrays**. For example, conversion of `<a><b /></a>` depends on `NullValue` setting.
+Conversion of empty XML nodes like `<a><b /></a>` depends on `NullValue` setting. For example,
 ```rust
 let config = Config::new_with_custom_values(false, "@", "#text", NullValue::Ignore)
         .add_json_type_override("/a/b", JsonArray::Always(JsonType::Infer));
