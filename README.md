@@ -70,14 +70,14 @@ Sample XML document:
 ```
 Configuration to make attribute `attr1="007"` always come out as a JSON string:
 ```rust
-let conf = Config::new_with_defaults().add_json_type_override("/a/@attr1", JsonType::AlwaysString);
+let conf = Config::new_with_defaults().add_json_type_override("/a/@attr1", JsonArray::Infer(JsonType::AlwaysString));
 ```
 Configuration to make both attributes and the text node of `<b />` always come out as a JSON string:
 ```rust
 let conf = Config::new_with_defaults()
-          .add_json_type_override("/a/@attr1", JsonType::AlwaysString)
-          .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString)
-          .add_json_type_override("/a/b", JsonType::AlwaysString);
+          .add_json_type_override("/a/@attr1", JsonArray::Infer(JsonType::AlwaysString))
+          .add_json_type_override("/a/b/@attr1", JsonArray::Infer(JsonType::AlwaysString))
+          .add_json_type_override("/a/b", JsonArray::Infer(JsonType::AlwaysString));
 ```
 
 #### Boolean
@@ -86,10 +86,69 @@ The only two [valid boolean values in JSON](https://json-schema.org/understandin
 
 ```rust
 let conf = Config::new_with_defaults()
-        .add_json_type_override("/a/b", JsonType::Bool(vec!["True","true","1","yes"]));
+        .add_json_type_override("/a/b", JsonArray::Infer(JsonType::Bool(vec!["True","true","1","yes"])));
 ```
 
-See embedded docs for `Config` struct and its members for more details. 
+#### Arrays
+
+Multiple nodes with the same name are automatically converted into a JSON array. For example,
+```xml
+<a>
+  <b>1</b>
+  <b>2</b>
+</a>
+```
+is converted into 
+```json
+{ "a": 
+  { "b": [1,2] }
+}
+```
+By default, a single element like
+```xml
+<a>
+  <b>1</b>
+</a>
+```
+is converted into a scalar value or a map
+```json
+{ "a": 
+  { "b": 1 } 
+}
+```
+
+You can use `add_json_type_override()` with `JsonArray::Always()` to create a JSON array regardless of the number of elements so that `<a><b>1</b></a>` becomes `{ "a": { "b": [1] } }`.
+
+`JsonArray::Always()` and `JsonArray::Infer()` can specify what underlying JSON type should be used, e.g. 
+* `JsonArray::Infer(JsonType::AlwaysString)` - infer array, convert the values to JSON string
+* `JsonArray::Always(JsonType::Infer)` - always wrap the values in a JSON array, infer the value types
+* `JsonArray::Always(JsonType::AlwaysString)` - always wrap the values in a JSON array and convert values to JSON string
+
+```rust
+let config = Config::new_with_defaults()
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::AlwaysString));
+```
+
+Conversion of empty XML nodes like `<a><b /></a>` depends on `NullValue` setting. For example,
+```rust
+let config = Config::new_with_custom_values(false, "@", "#text", NullValue::Ignore)
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::Infer));
+```
+converts `<a><b /></a>` to
+```json
+{"a": null}
+```
+and the same `config` with `NullValue::Null` converts it to
+
+```json
+{"a": { "b": [null] }}
+```
+
+It is not possible to get an empty array like `{"a": { "b": [] }}`.
+
+----
+
+*See embedded docs for `Config` struct and its members for more details.*
 
 ## Conversion specifics
 
@@ -169,8 +228,8 @@ is converted into
 
 #### Additional info and examples
 
-See `mod tests` inside [lib.rs](src/lib.rs) for more usage examples.
+See [tests.rs](src/tests.rs) for more usage examples.
 
 ## Edge cases
 
-XML and JSON are not directly compatible for 1:1 conversion without additional hints to the converter. Feel free to post an issue if you come across any incorrect conversion.
+XML and JSON are not directly compatible for 1:1 conversion without additional hints to the converter. Please, post an issue if you come across any incorrect conversion.

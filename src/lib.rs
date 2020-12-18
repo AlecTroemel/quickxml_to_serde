@@ -35,10 +35,11 @@
 //! for some XML nodes using xPath-like notations. Example for enforcing attribute `attr2` from the snippet above
 //! as JSON String regardless of its contents:
 //! ```
-//! use quickxml_to_serde::{Config, JsonType};
+//! use quickxml_to_serde::{Config, JsonArray, JsonType};
 //!
 //! #[cfg(feature = "json_types")]
-//! let conf = Config::new_with_defaults().add_json_type_override("/a/b/c/@attr2", JsonType::AlwaysString);
+//! let conf = Config::new_with_defaults()
+//!            .add_json_type_override("/a/b/c/@attr2", JsonArray::Infer(JsonType::AlwaysString));
 //! ```
 //!
 //! ## Detailed documentation
@@ -73,12 +74,27 @@ pub enum NullValue {
     EmptyObject,
 }
 
+/// Defines how the values of this Node should be converted into a JSON array with the underlying types.
+/// * `Infer` - the nodes are converted into a JSON array only if there are multiple identical elements.
+/// E.g. `<a><b>1</b></a>` becomes a map `{"a": {"b": 1 }}` and `<a><b>1</b><b>2</b><b>3</b></a>` becomes
+/// an array `{"a": {"b": [1, 2, 3] }}`
+/// * `Always` - the nodes are converted into a JSON array regardless of how many there are.
+/// E.g. `<a><b>1</b></a>` becomes an array with a single value `{"a": {"b": [1] }}` and  
+/// `<a><b>1</b><b>2</b><b>3</b></a>` also becomes an array `{"a": {"b": [1, 2, 3] }}`
+#[derive(Debug)]
+pub enum JsonArray {
+    /// Convert the nodes into a JSON array even if there is only one element
+    Always(JsonType),
+    /// Convert the nodes into a JSON array only if there are multiple identical elements
+    Infer(JsonType),
+}
+
 /// Defines which data type to apply in JSON format for consistency of output.
 /// E.g., the range of XML values for the same node type may be `1234`, `001234`, `AB1234`.
 /// It is impossible to guess with 100% consistency which data type to apply without seeing
 /// the entire range of values. Use this enum to tell the converter which data type should
 /// be applied.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum JsonType {
     /// Do not try to infer the type and convert the value to JSON string.
     /// E.g. convert `<a>1234</a>` into `{"a":"1234"}` or `<a>true</a>` into `{"a":"true"}`
@@ -123,7 +139,7 @@ pub struct Config {
     /// - path for `c`: `/a/b/@c`
     /// - path for `b` text node (007): `/a/b`
     #[cfg(feature = "json_types")]
-    pub json_type_overrides: HashMap<String, JsonType>,
+    pub json_type_overrides: HashMap<String, JsonArray>,
 }
 
 impl Config {
@@ -165,7 +181,7 @@ impl Config {
     /// - path for `b` text node (007): `/a/b`
     /// This function will add the leading `/` if it's missing.
     #[cfg(feature = "json_types")]
-    pub fn add_json_type_override(self, path: &str, json_type: JsonType) -> Self {
+    pub fn add_json_type_override(self, path: &str, json_type: JsonArray) -> Self {
         let mut conf = self;
         let path = if path.starts_with("/") {
             path.to_owned()
@@ -238,18 +254,13 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
     // add the current node to the path
     #[cfg(feature = "json_types")]
     let path = [path, "/", el.name()].concat();
+
     // get the json_type for this node
-    #[cfg(feature = "json_types")]
-    let json_type = config
-        .json_type_overrides
-        .get(&path)
-        .unwrap_or(&JsonType::Infer);
-    #[cfg(not(feature = "json_types"))]
-    let json_type = &JsonType::Infer;
+    let (_, json_type_value) = get_json_type(config, &path);
 
     // is it an element with text?
     if el.text().trim() != "" {
-        // does it have attributes?
+        // process node's attributes, if present
         if el.attrs().count() > 0 {
             Some(Value::Object(
                 el.attrs()
@@ -259,18 +270,19 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
                         let path = [path.clone(), "/@".to_owned(), k.to_owned()].concat();
                         // get the json_type for this node
                         #[cfg(feature = "json_types")]
-                        let json_type = config
-                            .json_type_overrides
-                            .get(&path)
-                            .unwrap_or(&JsonType::Infer);
+                        let (_, json_type_value) = get_json_type(config, &path);
                         (
                             [config.xml_attr_prefix.clone(), k.to_owned()].concat(),
-                            parse_text(&v, config.leading_zero_as_string, json_type),
+                            parse_text(&v, config.leading_zero_as_string, &json_type_value),
                         )
                     })
                     .chain(vec![(
                         config.xml_text_node_prop_name.clone(),
-                        parse_text(&el.text()[..], config.leading_zero_as_string, json_type),
+                        parse_text(
+                            &el.text()[..],
+                            config.leading_zero_as_string,
+                            &json_type_value,
+                        ),
                     )])
                     .collect(),
             ))
@@ -278,7 +290,7 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
             Some(parse_text(
                 &el.text()[..],
                 config.leading_zero_as_string,
-                json_type,
+                &json_type_value,
             ))
         }
     } else {
@@ -291,13 +303,10 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
             let path = [path.clone(), "/@".to_owned(), k.to_owned()].concat();
             // get the json_type for this node
             #[cfg(feature = "json_types")]
-            let json_type = config
-                .json_type_overrides
-                .get(&path)
-                .unwrap_or(&JsonType::Infer);
+            let (_, json_type_value) = get_json_type(config, &path);
             data.insert(
                 [config.xml_attr_prefix.clone(), k.to_owned()].concat(),
-                parse_text(&v, config.leading_zero_as_string, json_type),
+                parse_text(&v, config.leading_zero_as_string, &json_type_value),
             );
         }
 
@@ -307,18 +316,30 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
                 Some(val) => {
                     let name = &child.name().to_string();
 
-                    if data.contains_key(name) {
+                    #[cfg(feature = "json_types")]
+                    let path = [path.clone(), "/".to_owned(), name.clone()].concat();
+                    let (json_type_array, _) = get_json_type(config, &path);
+                    // does it have to be an array?
+                    if json_type_array || data.contains_key(name) {
+                        // was this property converted to an array earlier?
                         if data.get(name).unwrap_or(&Value::Null).is_array() {
+                            // add the new value to an existing array
                             data.get_mut(name)
                                 .unwrap()
                                 .as_array_mut()
                                 .unwrap()
                                 .push(val);
                         } else {
-                            let temp = data.remove(name).unwrap();
-                            data.insert(name.clone(), Value::Array(vec![temp, val]));
+                            // convert the property to an array with the existing and the new values
+                            let new_val = match data.remove(name) {
+                                None => vec![val],
+                                Some(temp) => vec![temp, val],
+                            };
+                            data.insert(name.clone(), Value::Array(new_val));
                         }
                     } else {
+                        // this is the first time this property is encountered and it doesn't
+                        // have to be an array, so add it as-is
                         data.insert(name.clone(), val);
                     }
                 }
@@ -353,4 +374,27 @@ fn xml_to_map(e: &Element, config: &Config) -> Value {
 pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> {
     let root = Element::from_str(xml.as_str())?;
     Ok(xml_to_map(&root, config))
+}
+
+/// Returns a tuple for Array and Value enforcements for the current node or
+/// `(false, JsonArray::Infer(JsonType::Infer)` if the current path is not found
+/// in the list of paths with custom config.
+#[cfg(feature = "json_types")]
+#[inline]
+fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
+    match config
+        .json_type_overrides
+        .get(path)
+        .unwrap_or(&JsonArray::Infer(JsonType::Infer))
+    {
+        JsonArray::Infer(v) => (false, v.clone()),
+        JsonArray::Always(v) => (true, v.clone()),
+    }
+}
+
+/// Always returns `(false, JsonArray::Infer(JsonType::Infer)` if `json_types` feature is not enabled.
+#[cfg(not(feature = "json_types"))]
+#[inline]
+fn get_json_type(_config: &Config, _path: &String) -> (bool, JsonType) {
+    (false, JsonType::Infer)
 }

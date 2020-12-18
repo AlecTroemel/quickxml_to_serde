@@ -1,6 +1,6 @@
 extern crate quickxml_to_serde;
 #[cfg(feature = "json_types")]
-use quickxml_to_serde::{xml_string_to_json, Config, JsonType};
+use quickxml_to_serde::{xml_string_to_json, Config, JsonArray, JsonType};
 
 #[cfg(feature = "json_types")]
 fn main() {
@@ -8,8 +8,8 @@ fn main() {
 
     // custom config values for 1 attribute and a text node
     let conf = Config::new_with_defaults()
-        .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString)
-        .add_json_type_override("/a/b", JsonType::AlwaysString);
+        .add_json_type_override("/a/b/@attr1", JsonArray::Infer(JsonType::AlwaysString))
+        .add_json_type_override("/a/b", JsonArray::Infer(JsonType::AlwaysString));
     let json = xml_string_to_json(String::from(xml), &conf);
     println!("{}", json.expect("Malformed XML").to_string());
 }

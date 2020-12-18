@@ -89,13 +89,13 @@ fn test_mixed_nodes() {
 #[test]
 fn test_add_json_type_override() {
     // check if it adds the leading slash
-    let config =
-        Config::new_with_defaults().add_json_type_override("a/@attr1", JsonType::AlwaysString);
+    let config = Config::new_with_defaults()
+        .add_json_type_override("a/@attr1", JsonArray::Infer(JsonType::AlwaysString));
     assert!(config.json_type_overrides.get("/a/@attr1").is_some());
 
     // check if it doesn't add any extra slashes
-    let config =
-        Config::new_with_defaults().add_json_type_override("/a/@attr1", JsonType::AlwaysString);
+    let config = Config::new_with_defaults()
+        .add_json_type_override("/a/@attr1", JsonArray::Infer(JsonType::AlwaysString));
     assert!(config.json_type_overrides.get("/a/@attr1").is_some());
 }
 
@@ -130,8 +130,8 @@ fn test_json_type_overrides() {
             }
         }
     });
-    let conf =
-        Config::new_with_defaults().add_json_type_override("/a/@attr1", JsonType::AlwaysString);
+    let conf = Config::new_with_defaults()
+        .add_json_type_override("/a/@attr1", JsonArray::Infer(JsonType::AlwaysString));
     let result = xml_string_to_json(String::from(xml), &conf);
     assert_eq!(expected, result.unwrap());
 
@@ -147,9 +147,12 @@ fn test_json_type_overrides() {
         }
     });
     let conf = Config::new_with_defaults()
-        .add_json_type_override("/a/@attr1", JsonType::AlwaysString)
-        .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString)
-        .add_json_type_override("/a/b/@attr2", JsonType::Bool(vec!["True"]));
+        .add_json_type_override("/a/@attr1", JsonArray::Infer(JsonType::AlwaysString))
+        .add_json_type_override("/a/b/@attr1", JsonArray::Infer(JsonType::AlwaysString))
+        .add_json_type_override(
+            "/a/b/@attr2",
+            JsonArray::Infer(JsonType::Bool(vec!["True"])),
+        );
     let result = xml_string_to_json(String::from(xml), &conf);
     assert_eq!(expected, result.unwrap());
 
@@ -165,10 +168,110 @@ fn test_json_type_overrides() {
         }
     });
     let conf = Config::new_with_defaults()
-        .add_json_type_override("/a/@attr1", JsonType::AlwaysString)
-        .add_json_type_override("/a/b/@attr1", JsonType::AlwaysString)
-        .add_json_type_override("/a/b", JsonType::AlwaysString);
+        .add_json_type_override("/a/@attr1", JsonArray::Infer(JsonType::AlwaysString))
+        .add_json_type_override("/a/b/@attr1", JsonArray::Infer(JsonType::AlwaysString))
+        .add_json_type_override("/a/b", JsonArray::Infer(JsonType::AlwaysString));
     let result = xml_string_to_json(String::from(xml), &conf);
+    assert_eq!(expected, result.unwrap());
+}
+
+#[cfg(feature = "json_types")]
+#[test]
+fn test_enforce_array() {
+    // test an array with default config values
+    let xml = r#"<a attr1="att1"><b c="att">1</b><b c="att">2</b></a>"#;
+    let expected = json!({
+        "a": {
+            "@attr1":"att1",
+            "b": [{ "@c":"att", "#text":1 }, { "@c":"att", "#text":2 }]
+        }
+    });
+    let config = Config::new_with_defaults();
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+    // test a non-array with default config values
+    let xml = r#"<a attr1="att1"><b c="att">1</b></a>"#;
+    let expected = json!({
+        "a": {
+            "@attr1":"att1",
+            "b": { "@c":"att", "#text":1 }
+        }
+    });
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+    // test a non-array with array enforcement (as object)
+    let xml = r#"<a attr1="att1"><b c="att">1</b></a>"#;
+    let expected = json!({
+        "a": {
+            "@attr1":"att1",
+            "b": [{ "@c":"att", "#text":1 }]
+        }
+    });
+    let config = Config::new_with_defaults()
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::Infer));
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+    // test a non-array with array enforcement (as value)
+    let xml = r#"<a><b>1</b></a>"#;
+    let expected = json!({
+        "a": {
+            "b": [1]
+        }
+    });
+    let config = Config::new_with_defaults()
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::Infer));
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+    // test an array with array enforcement (as value)
+    let xml = r#"<a><b>1</b><b>2</b></a>"#;
+    let expected = json!({
+        "a": {
+            "b": [1,2]
+        }
+    });
+    let config = Config::new_with_defaults()
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::Infer));
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+    // test a non-array with array enforcement + type enforcement (as value)
+    let xml = r#"<a><b>1</b></a>"#;
+    let expected = json!({
+        "a": {
+            "b": ["1"]
+        }
+    });
+    let config = Config::new_with_defaults()
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::AlwaysString));
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+    // test an array with array enforcement + type enforcement (as value)
+    let xml = r#"<a><b>1</b><b>2</b></a>"#;
+    let expected = json!({
+        "a": {
+            "b": ["1","2"]
+        }
+    });
+    let config = Config::new_with_defaults()
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::AlwaysString));
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+    // test an array with array enforcement + null values
+    let xml = r#"<a><b /></a>"#;
+    let expected = json!({
+        "a": {
+            "b": [null]
+        }
+    });
+    let config = Config::new_with_custom_values(false, "@", "#text", NullValue::Null)
+        .add_json_type_override("/a/b", JsonArray::Always(JsonType::Infer));
+    let result = xml_string_to_json(String::from(xml), &config);
     assert_eq!(expected, result.unwrap());
 }
 
