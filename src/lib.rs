@@ -376,6 +376,12 @@ pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> 
     Ok(xml_to_map(&root, config))
 }
 
+/// Converts the given XML string into `serde::Value` using settings from `Config` struct.
+pub fn xml_str_to_json(xml: &str, config: &Config) -> Result<Value, Error> {
+    let root = Element::from_str(xml)?;
+    Ok(xml_to_map(&root, config))
+}
+
 /// Returns a tuple for Array and Value enforcements for the current node or
 /// `(false, JsonArray::Infer(JsonType::Infer)` if the current path is not found
 /// in the list of paths with custom config.
