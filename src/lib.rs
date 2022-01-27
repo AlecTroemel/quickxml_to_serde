@@ -372,8 +372,7 @@ fn xml_to_map(e: &Element, config: &Config) -> Value {
 
 /// Converts the given XML string into `serde::Value` using settings from `Config` struct.
 pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> {
-    let root = Element::from_str(xml.as_str())?;
-    Ok(xml_to_map(&root, config))
+    xml_str_to_json(xml.as_str(), config)
 }
 
 /// Converts the given XML string into `serde::Value` using settings from `Config` struct.
