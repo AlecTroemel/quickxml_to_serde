@@ -31,7 +31,7 @@
 //! * **Output with a custom config:** `{"a":{"attr1":1,"b":{"c":{"attr2":"001","txt":"some text"}}}}`
 //!
 //! ## Additional features
-//! Use `quickxml_to_serde = { version = "0.4", features = ["json_types"] }` to enable support for enforcing JSON types     
+//! Use `quickxml_to_serde = { version = "0.4", features = ["json_types"] }` to enable support for enforcing JSON types
 //! for some XML nodes using xPath-like notations. Example for enforcing attribute `attr2` from the snippet above
 //! as JSON String regardless of its contents:
 //! ```
@@ -79,7 +79,7 @@ pub enum NullValue {
 /// E.g. `<a><b>1</b></a>` becomes a map `{"a": {"b": 1 }}` and `<a><b>1</b><b>2</b><b>3</b></a>` becomes
 /// an array `{"a": {"b": [1, 2, 3] }}`
 /// * `Always` - the nodes are converted into a JSON array regardless of how many there are.
-/// E.g. `<a><b>1</b></a>` becomes an array with a single value `{"a": {"b": [1] }}` and  
+/// E.g. `<a><b>1</b></a>` becomes an array with a single value `{"a": {"b": [1] }}` and
 /// `<a><b>1</b><b>2</b><b>3</b></a>` also becomes an array `{"a": {"b": [1, 2, 3] }}`
 #[derive(Debug)]
 pub enum JsonArray {
@@ -371,14 +371,14 @@ fn xml_to_map(e: &Element, config: &Config) -> Value {
 }
 
 /// Converts the given XML string into `serde::Value` using settings from `Config` struct.
-pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> {
-    xml_str_to_json(xml.as_str(), config)
-}
-
-/// Converts the given XML string into `serde::Value` using settings from `Config` struct.
 pub fn xml_str_to_json(xml: &str, config: &Config) -> Result<Value, Error> {
     let root = Element::from_str(xml)?;
     Ok(xml_to_map(&root, config))
+}
+
+/// Converts the given XML string into `serde::Value` using settings from `Config` struct.
+pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> {
+    xml_str_to_json(xml.as_str(), config)
 }
 
 /// Returns a tuple for Array and Value enforcements for the current node or
