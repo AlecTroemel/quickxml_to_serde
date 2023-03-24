@@ -323,6 +323,7 @@ fn convert_no_text(
                 #[cfg(feature = "json_types")]
                 let path = [path.clone(), "/".to_owned(), name.clone()].concat();
                 let (json_type_array, _) = get_json_type(config, &path);
+
                 // does it have to be an array?
                 if json_type_array || data.contains_key(name) {
                     // was this property converted to an array earlier?
@@ -375,8 +376,9 @@ fn convert_node(el: &roxmltree::Node, config: &Config, path: &String) -> Option<
 
     // is it an element with text?
     match el.text() {
-        Some(text) => {
-            if text.trim() != "" {
+        Some(mut text) => {
+            text = text.trim();
+            if text != "" {
                 convert_text(el, config, text, json_type_value)
             } else {
                 convert_no_text(el, config, path, json_type_value)

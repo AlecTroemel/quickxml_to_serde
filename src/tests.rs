@@ -350,7 +350,7 @@ fn convert_test_files() {
 
     entries.sort();
 
-    let conf = Config::new_with_custom_values(true, "", "text", NullValue::Null);
+    let conf = Config::new_with_custom_values(true, "", "text", NullValue::Ignore);
 
     for mut entry in entries {
         // only XML files should be processed
