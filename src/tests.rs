@@ -376,3 +376,18 @@ fn convert_test_files() {
         );
     }
 }
+
+#[test]
+fn test_xml_str_to_json() {
+    let expected = json!({
+        "a": {
+            "b":[ 12345, 12345.0, 12345.6 ]
+        }
+    });
+    let result = xml_str_to_json(
+        "<a><b>12345</b><b>12345.0</b><b>12345.6</b></a>",
+        &Config::new_with_defaults(),
+    );
+
+    assert_eq!(expected, result.unwrap());
+}
