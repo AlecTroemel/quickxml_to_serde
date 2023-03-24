@@ -11,7 +11,7 @@ license = "MIT"
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
-minidom = "0.12"
+roxmltree = "0.18.0"
 
 [features]
 json_types = [] # Enable to enforce fixed JSON data types for certain XML nodes
