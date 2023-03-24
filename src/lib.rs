@@ -247,6 +247,126 @@ fn parse_text(text: &str, leading_zero_as_string: bool, json_type: &JsonType) ->
     Value::String(text.into())
 }
 
+fn convert_text(
+    el: &roxmltree::Node,
+    config: &Config,
+    path: &String,
+    text: &str,
+    json_type_value: JsonType,
+) -> Option<Value> {
+    // process node's attributes, if present
+    if el.attributes().count() > 0 {
+        Some(Value::Object(
+            el.attributes()
+                .map(|attr| {
+                    // add the current node to the path
+                    #[cfg(feature = "json_types")]
+                    let path = [path.clone(), "/@".to_owned(), attr.name().to_string()].concat();
+                    // get the json_type for this node
+                    #[cfg(feature = "json_types")]
+                    let (_, json_type_value) = get_json_type(config, &path);
+                    (
+                        [config.xml_attr_prefix.clone(), attr.name().to_string()].concat(),
+                        parse_text(
+                            attr.value(),
+                            config.leading_zero_as_string,
+                            &json_type_value,
+                        ),
+                    )
+                })
+                .chain(vec![(
+                    config.xml_text_node_prop_name.clone(),
+                    parse_text(&text[..], config.leading_zero_as_string, &json_type_value),
+                )])
+                .collect(),
+        ))
+    } else {
+        Some(parse_text(
+            &text[..],
+            config.leading_zero_as_string,
+            &json_type_value,
+        ))
+    }
+}
+
+fn convert_no_text(
+    el: &roxmltree::Node,
+    config: &Config,
+    path: &String,
+    json_type_value: JsonType,
+) -> Option<Value> {
+    // this element has no text, but may have other child nodes
+    let mut data = Map::new();
+
+    for attr in el.attributes() {
+        // add the current node to the path
+        #[cfg(feature = "json_types")]
+        let path = [path.clone(), "/@".to_owned(), attr.name().to_string()].concat();
+        // get the json_type for this node
+        #[cfg(feature = "json_types")]
+        let (_, json_type_value) = get_json_type(config, &path);
+        data.insert(
+            [config.xml_attr_prefix.clone(), attr.name().to_string()].concat(),
+            parse_text(
+                attr.value(),
+                config.leading_zero_as_string,
+                &json_type_value,
+            ),
+        );
+    }
+
+    // process child element recursively
+    for child in el.children() {
+        match convert_node(&child, config, &path) {
+            Some(val) => {
+                if val != Value::Null {
+                    let name = &child.tag_name().name().to_string();
+
+                    #[cfg(feature = "json_types")]
+                    let path = [path.clone(), "/".to_owned(), name.clone()].concat();
+                    let (json_type_array, _) = get_json_type(config, &path);
+                    // does it have to be an array?
+                    if json_type_array || data.contains_key(name) {
+                        // was this property converted to an array earlier?
+                        if data.get(name).unwrap_or(&Value::Null).is_array() {
+                            // add the new value to an existing array
+                            data.get_mut(name)
+                                .unwrap()
+                                .as_array_mut()
+                                .unwrap()
+                                .push(val);
+                        } else {
+                            // convert the property to an array with the existing and the new values
+                            let new_val = match data.remove(name) {
+                                None => vec![val],
+                                Some(temp) => vec![temp, val],
+                            };
+                            data.insert(name.clone(), Value::Array(new_val));
+                        }
+                    } else {
+                        // this is the first time this property is encountered and it doesn't
+                        // have to be an array, so add it as-is
+                        data.insert(name.clone(), val);
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
+
+    // return the JSON object if it's not empty
+    if !data.is_empty() {
+        return Some(Value::Object(data));
+    }
+
+    // empty objects are treated according to config rules set by the caller
+    match config.empty_element_handling {
+        NullValue::Null => Some(Value::Null),
+        NullValue::EmptyObject => Some(Value::Object(data)),
+        NullValue::Ignore => None,
+    }
+}
+
 /// Converts an XML Element into a JSON property
 fn convert_node(el: &roxmltree::Node, config: &Config, path: &String) -> Option<Value> {
     // add the current node to the path
@@ -259,112 +379,13 @@ fn convert_node(el: &roxmltree::Node, config: &Config, path: &String) -> Option<
     // is it an element with text?
     match el.text() {
         Some(text) => {
-            // process node's attributes, if present
-
-            if el.attributes().count() > 0 {
-                Some(Value::Object(
-                    el.attributes()
-                        .map(|attr| {
-                            // add the current node to the path
-                            #[cfg(feature = "json_types")]
-                            let path =
-                                [path.clone(), "/@".to_owned(), attr.name().to_string()].concat();
-                            // get the json_type for this node
-                            #[cfg(feature = "json_types")]
-                            let (_, json_type_value) = get_json_type(config, &path);
-                            (
-                                [config.xml_attr_prefix.clone(), attr.name().to_string()].concat(),
-                                parse_text(
-                                    attr.value(),
-                                    config.leading_zero_as_string,
-                                    &json_type_value,
-                                ),
-                            )
-                        })
-                        .chain(vec![(
-                            config.xml_text_node_prop_name.clone(),
-                            parse_text(&text[..], config.leading_zero_as_string, &json_type_value),
-                        )])
-                        .collect(),
-                ))
+            if text.trim() != "" {
+                convert_text(el, config, path, text, json_type_value)
             } else {
-                Some(parse_text(
-                    &text[..],
-                    config.leading_zero_as_string,
-                    &json_type_value,
-                ))
+                convert_no_text(el, config, path, json_type_value)
             }
         }
-        None => {
-            // this element has no text, but may have other child nodes
-            let mut data = Map::new();
-
-            for attr in el.attributes() {
-                // add the current node to the path
-                #[cfg(feature = "json_types")]
-                let path = [path.clone(), "/@".to_owned(), attr.name().to_string()].concat();
-                // get the json_type for this node
-                #[cfg(feature = "json_types")]
-                let (_, json_type_value) = get_json_type(config, &path);
-                data.insert(
-                    [config.xml_attr_prefix.clone(), attr.name().to_string()].concat(),
-                    parse_text(
-                        attr.value(),
-                        config.leading_zero_as_string,
-                        &json_type_value,
-                    ),
-                );
-            }
-
-            // process child element recursively
-            for child in el.children() {
-                match convert_node(&child, config, &path) {
-                    Some(val) => {
-                        let name = &child.tag_name().name().to_string();
-
-                        #[cfg(feature = "json_types")]
-                        let path = [path.clone(), "/".to_owned(), name.clone()].concat();
-                        let (json_type_array, _) = get_json_type(config, &path);
-                        // does it have to be an array?
-                        if json_type_array || data.contains_key(name) {
-                            // was this property converted to an array earlier?
-                            if data.get(name).unwrap_or(&Value::Null).is_array() {
-                                // add the new value to an existing array
-                                data.get_mut(name)
-                                    .unwrap()
-                                    .as_array_mut()
-                                    .unwrap()
-                                    .push(val);
-                            } else {
-                                // convert the property to an array with the existing and the new values
-                                let new_val = match data.remove(name) {
-                                    None => vec![val],
-                                    Some(temp) => vec![temp, val],
-                                };
-                                data.insert(name.clone(), Value::Array(new_val));
-                            }
-                        } else {
-                            // this is the first time this property is encountered and it doesn't
-                            // have to be an array, so add it as-is
-                            data.insert(name.clone(), val);
-                        }
-                    }
-                    _ => (),
-                }
-            }
-
-            // return the JSON object if it's not empty
-            if !data.is_empty() {
-                return Some(Value::Object(data));
-            }
-
-            // empty objects are treated according to config rules set by the caller
-            match config.empty_element_handling {
-                NullValue::Null => Some(Value::Null),
-                NullValue::EmptyObject => Some(Value::Object(data)),
-                NullValue::Ignore => None,
-            }
-        }
+        None => convert_no_text(el, config, path, json_type_value),
     }
 }
 
