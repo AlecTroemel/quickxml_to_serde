@@ -250,7 +250,6 @@ fn parse_text(text: &str, leading_zero_as_string: bool, json_type: &JsonType) ->
 fn convert_text(
     el: &roxmltree::Node,
     config: &Config,
-    path: &String,
     text: &str,
     json_type_value: JsonType,
 ) -> Option<Value> {
@@ -380,7 +379,7 @@ fn convert_node(el: &roxmltree::Node, config: &Config, path: &String) -> Option<
     match el.text() {
         Some(text) => {
             if text.trim() != "" {
-                convert_text(el, config, path, text, json_type_value)
+                convert_text(el, config, text, json_type_value)
             } else {
                 convert_no_text(el, config, path, json_type_value)
             }
