@@ -318,35 +318,33 @@ fn convert_no_text(
     for child in el.children() {
         match convert_node(&child, config, &path) {
             Some(val) => {
-                if val != Value::Null {
-                    let name = &child.tag_name().name().to_string();
+                let name = &child.tag_name().name().to_string();
 
-                    #[cfg(feature = "json_types")]
-                    let path = [path.clone(), "/".to_owned(), name.clone()].concat();
-                    let (json_type_array, _) = get_json_type(config, &path);
-                    // does it have to be an array?
-                    if json_type_array || data.contains_key(name) {
-                        // was this property converted to an array earlier?
-                        if data.get(name).unwrap_or(&Value::Null).is_array() {
-                            // add the new value to an existing array
-                            data.get_mut(name)
-                                .unwrap()
-                                .as_array_mut()
-                                .unwrap()
-                                .push(val);
-                        } else {
-                            // convert the property to an array with the existing and the new values
-                            let new_val = match data.remove(name) {
-                                None => vec![val],
-                                Some(temp) => vec![temp, val],
-                            };
-                            data.insert(name.clone(), Value::Array(new_val));
-                        }
+                #[cfg(feature = "json_types")]
+                let path = [path.clone(), "/".to_owned(), name.clone()].concat();
+                let (json_type_array, _) = get_json_type(config, &path);
+                // does it have to be an array?
+                if json_type_array || data.contains_key(name) {
+                    // was this property converted to an array earlier?
+                    if data.get(name).unwrap_or(&Value::Null).is_array() {
+                        // add the new value to an existing array
+                        data.get_mut(name)
+                            .unwrap()
+                            .as_array_mut()
+                            .unwrap()
+                            .push(val);
                     } else {
-                        // this is the first time this property is encountered and it doesn't
-                        // have to be an array, so add it as-is
-                        data.insert(name.clone(), val);
+                        // convert the property to an array with the existing and the new values
+                        let new_val = match data.remove(name) {
+                            None => vec![val],
+                            Some(temp) => vec![temp, val],
+                        };
+                        data.insert(name.clone(), Value::Array(new_val));
                     }
+                } else {
+                    // this is the first time this property is encountered and it doesn't
+                    // have to be an array, so add it as-is
+                    data.insert(name.clone(), val);
                 }
             }
             _ => (),
