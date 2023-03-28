@@ -372,7 +372,8 @@ fn convert_test_files() {
         assert!(
             file.write_all(to_string_pretty(&json).unwrap().as_bytes())
                 .is_ok(),
-            format!("Failed on {:?}", entry.as_os_str())
+            "Failed on {:?}",
+            entry.as_os_str()
         );
     }
 }

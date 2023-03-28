@@ -1,6 +1,6 @@
 [package]
 name = "quickxml_to_serde"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Alec Troemel <alec@mirusresearch.com>", "Max Voskob <max@onebro.me>"]
 description = "Convert between XML JSON using quickxml and serde"
 repository = "https://github.com/AlecTroemel/quickxml_to_serde"
@@ -11,7 +11,7 @@ license = "MIT"
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
-minidom = "0.12"
+roxmltree = "0.18.0"
 
 [features]
 json_types = [] # Enable to enforce fixed JSON data types for certain XML nodes

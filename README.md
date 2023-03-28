@@ -1,6 +1,6 @@
 # quickxml_to_serde
 
-Convert XML to JSON using [quick-xml](https://github.com/tafia/quick-xml) and [serde](https://github.com/serde-rs/json). Inspired by [node2object](https://github.com/vorot93/node2object).
+Convert XML to JSON using [roxml](https://github.com/RazrFalcon/roxmltree) and [serde](https://github.com/serde-rs/json). Inspired by [node2object](https://github.com/vorot93/node2object).
 
 ## Usage examples
 
@@ -98,9 +98,9 @@ Multiple nodes with the same name are automatically converted into a JSON array.
   <b>2</b>
 </a>
 ```
-is converted into 
+is converted into
 ```json
-{ "a": 
+{ "a":
   { "b": [1,2] }
 }
 ```
@@ -112,14 +112,14 @@ By default, a single element like
 ```
 is converted into a scalar value or a map
 ```json
-{ "a": 
-  { "b": 1 } 
+{ "a":
+  { "b": 1 }
 }
 ```
 
 You can use `add_json_type_override()` with `JsonArray::Always()` to create a JSON array regardless of the number of elements so that `<a><b>1</b></a>` becomes `{ "a": { "b": [1] } }`.
 
-`JsonArray::Always()` and `JsonArray::Infer()` can specify what underlying JSON type should be used, e.g. 
+`JsonArray::Always()` and `JsonArray::Infer()` can specify what underlying JSON type should be used, e.g.
 * `JsonArray::Infer(JsonType::AlwaysString)` - infer array, convert the values to JSON string
 * `JsonArray::Always(JsonType::Infer)` - always wrap the values in a JSON array, infer the value types
 * `JsonArray::Always(JsonType::AlwaysString)` - always wrap the values in a JSON array and convert values to JSON string
@@ -173,7 +173,7 @@ is converted into
 - XML namespace definitions are dropped. E.g. `<Tests xmlns="http://www.adatum.com" />` becomes `"Tests":{}`
 - Processing instructions, comments and DTD are ignored
 - **Presence of CDATA in the XML results in malformed JSON**
-- XML attributes can be prefixed via `Config::xml_attr_prefix`. E.g. using the default prefix `@` converts `<a b="y" />` into `{ "a": {"@b":"y"} }`. You can use no prefix or set your own value. 
+- XML attributes can be prefixed via `Config::xml_attr_prefix`. E.g. using the default prefix `@` converts `<a b="y" />` into `{ "a": {"@b":"y"} }`. You can use no prefix or set your own value.
 - Complex XML elements with text nodes put the XML text node value into a JSON property named in `Config::xml_text_node_prop_name`. E.g. setting `xml_text_node_prop_name` to `text` will convert
 ```xml
 <CardNumber Month="3" Year="19">1234567</CardNumber>
