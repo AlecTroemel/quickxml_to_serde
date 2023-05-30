@@ -1,3 +1,8 @@
+#![allow(clippy::items_after_test_module)]
+#![allow(clippy::single_match)]
+#![allow(clippy::single_char_pattern)]
+#![allow(clippy::needless_borrow)]
+#![allow(clippy::ptr_arg)]
 //! # quickxml_to_serde
 //! Fast and flexible conversion from XML to JSON using [quick-xml](https://github.com/tafia/quick-xml)
 //! and [serde](https://github.com/serde-rs/json). Inspired by [node2object](https://github.com/vorot93/node2object).
@@ -53,11 +58,17 @@
 extern crate minidom;
 extern crate serde_json;
 
+#[cfg(feature = "regex_path")]
+extern crate regex;
+
 use minidom::{Element, Error};
 use serde_json::{Map, Number, Value};
 #[cfg(feature = "json_types")]
 use std::collections::HashMap;
 use std::str::FromStr;
+
+#[cfg(feature = "regex_path")]
+use regex::Regex;
 
 #[cfg(test)]
 mod tests;
@@ -87,6 +98,24 @@ pub enum JsonArray {
     Always(JsonType),
     /// Convert the nodes into a JSON array only if there are multiple identical elements
     Infer(JsonType),
+}
+
+/// TODO: Docs
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum XmlPath {
+    /// TODO
+    Absolute(String),
+    /// TODO
+    #[cfg(feature = "regex_path")]
+    Regex(String),
+}
+
+impl From<&str> for XmlPath {
+    fn from(value: &str) -> Self {
+        // For retro-compatibility and for syntax's sake, a string may be
+        // coerced into an absolute path.
+        XmlPath::Absolute(value.into())
+    }
 }
 
 /// Defines which data type to apply in JSON format for consistency of output.
@@ -140,6 +169,9 @@ pub struct Config {
     /// - path for `b` text node (007): `/a/b`
     #[cfg(feature = "json_types")]
     pub json_type_overrides: HashMap<String, JsonArray>,
+    /// TODO!
+    #[cfg(feature = "regex_path")]
+    pub json_regex_type_overrides: Vec<(Regex, JsonArray)>,
 }
 
 impl Config {
@@ -154,6 +186,8 @@ impl Config {
             empty_element_handling: NullValue::EmptyObject,
             #[cfg(feature = "json_types")]
             json_type_overrides: HashMap::new(),
+            #[cfg(feature = "regex_path")]
+            json_regex_type_overrides: Vec::new(),
         }
     }
 
@@ -171,6 +205,8 @@ impl Config {
             empty_element_handling,
             #[cfg(feature = "json_types")]
             json_type_overrides: HashMap::new(),
+            #[cfg(feature = "regex_path")]
+            json_regex_type_overrides: Vec::new(),
         }
     }
 
@@ -181,14 +217,27 @@ impl Config {
     /// - path for `b` text node (007): `/a/b`
     /// This function will add the leading `/` if it's missing.
     #[cfg(feature = "json_types")]
-    pub fn add_json_type_override(self, path: &str, json_type: JsonArray) -> Self {
+    pub fn add_json_type_override<P: Into<XmlPath>>(self, path: P, json_type: JsonArray) -> Self {
         let mut conf = self;
-        let path = if path.starts_with("/") {
-            path.to_owned()
-        } else {
-            ["/", path].concat()
-        };
-        conf.json_type_overrides.insert(path, json_type);
+
+        match path.into() {
+            XmlPath::Absolute(path) => {
+                let path = if path.starts_with("/") {
+                    path
+                } else {
+                    ["/", &path].concat()
+                };
+                conf.json_type_overrides.insert(path, json_type);
+            }
+            #[cfg(feature = "regex_path")]
+            XmlPath::Regex(path) => {
+                conf.json_regex_type_overrides.push((
+                    Regex::new(&path).expect("TODO: Temporary panic!"),
+                    json_type
+                ));
+            }
+        }
+
         conf
     }
 }
@@ -381,20 +430,43 @@ pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> 
     xml_str_to_json(xml.as_str(), config)
 }
 
-/// Returns a tuple for Array and Value enforcements for the current node or
-/// `(false, JsonArray::Infer(JsonType::Infer)` if the current path is not found
-/// in the list of paths with custom config.
 #[cfg(feature = "json_types")]
 #[inline]
-fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
+fn get_json_type_with_absolute_path(config: &Config, path: &String) -> (bool, JsonType) {
     match config
-        .json_type_overrides
-        .get(path)
-        .unwrap_or(&JsonArray::Infer(JsonType::Infer))
+    .json_type_overrides
+    .get(path)
+    .unwrap_or(&JsonArray::Infer(JsonType::Infer))
     {
         JsonArray::Infer(v) => (false, v.clone()),
         JsonArray::Always(v) => (true, v.clone()),
     }
+}
+
+/// Returns a tuple for Array and Value enforcements for the current node or
+/// `(false, JsonArray::Infer(JsonType::Infer)` if the current path is not found
+/// in the list of paths with custom config.
+#[cfg(feature = "json_types")]
+#[cfg(not(feature = "regex_path"))]
+#[inline]
+fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
+    get_json_type_with_absolute_path(config, path)
+}
+
+#[cfg(feature = "json_types")]
+#[cfg(feature = "regex_path")]
+#[inline]
+fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
+    for (regex, json_array) in &config.json_regex_type_overrides {
+        if regex.is_match(path) {
+            return match json_array {
+                JsonArray::Infer(v) => (false, v.clone()),
+                JsonArray::Always(v) => (true, v.clone()),
+            };
+        }
+    }
+
+    get_json_type_with_absolute_path(config, path)
 }
 
 /// Always returns `(false, JsonArray::Infer(JsonType::Infer)` if `json_types` feature is not enabled.
