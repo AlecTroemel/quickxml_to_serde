@@ -101,20 +101,28 @@ pub enum JsonArray {
 }
 
 /// TODO: Docs
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum XmlPath {
+#[derive(Debug)]
+pub enum PathMatcher {
     /// TODO
     Absolute(String),
     /// TODO
     #[cfg(feature = "regex_path")]
-    Regex(String),
+    Regex(Regex),
 }
 
-impl From<&str> for XmlPath {
+impl From<&str> for PathMatcher {
     fn from(value: &str) -> Self {
         // For retro-compatibility and for syntax's sake, a string may be
         // coerced into an absolute path.
-        XmlPath::Absolute(value.into())
+        PathMatcher::Absolute(value.into())
+    }
+}
+
+#[cfg(feature = "regex_path")]
+impl From<Regex> for PathMatcher {
+    fn from(value: Regex) -> Self {
+        // ... While a Regex may be coerced into a regex path.
+        PathMatcher::Regex(value)
     }
 }
 
@@ -217,11 +225,11 @@ impl Config {
     /// - path for `b` text node (007): `/a/b`
     /// This function will add the leading `/` if it's missing.
     #[cfg(feature = "json_types")]
-    pub fn add_json_type_override<P: Into<XmlPath>>(self, path: P, json_type: JsonArray) -> Self {
+    pub fn add_json_type_override<P: Into<PathMatcher>>(self, path: P, json_type: JsonArray) -> Self {
         let mut conf = self;
 
         match path.into() {
-            XmlPath::Absolute(path) => {
+            PathMatcher::Absolute(path) => {
                 let path = if path.starts_with("/") {
                     path
                 } else {
@@ -230,9 +238,9 @@ impl Config {
                 conf.json_type_overrides.insert(path, json_type);
             }
             #[cfg(feature = "regex_path")]
-            XmlPath::Regex(path) => {
+            PathMatcher::Regex(regex) => {
                 conf.json_regex_type_overrides.push((
-                    Regex::new(&path).expect("TODO: Temporary panic!"),
+                    regex,
                     json_type
                 ));
             }

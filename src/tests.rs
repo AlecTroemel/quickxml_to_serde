@@ -395,6 +395,8 @@ fn test_xml_str_to_json() {
 #[cfg(feature = "regex_path")]
 #[test]
 fn test_regex_json_type_overrides() {
+    use regex::Regex;
+
     // test a non-array with array enforcement (as object).
     let xml = r#"<a attr1="att1"><b c="att">1</b></a>"#;
     let expected = json!({
@@ -406,7 +408,7 @@ fn test_regex_json_type_overrides() {
 
     let config = Config::new_with_defaults()
         .add_json_type_override(
-            XmlPath::Regex(r"\w/b".into()),
+            Regex::new(r"\w/b").unwrap(),
             JsonArray::Always(JsonType::Infer
         )
     );
@@ -452,7 +454,7 @@ fn test_regex_json_type_overrides() {
 
     let config = Config::new_with_defaults()
         .add_json_type_override(
-            XmlPath::Regex(r"element".into()),
+            Regex::new(r"element").unwrap(),
             JsonArray::Always(JsonType::Infer)
         );
 
