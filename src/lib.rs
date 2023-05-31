@@ -451,14 +451,14 @@ pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> 
 /// in the list of paths with custom config.
 #[cfg(feature = "json_types")]
 #[inline]
-fn get_json_type_with_absolute_path(config: &Config, path: &String) -> (bool, JsonType) {
+fn get_json_type_with_absolute_path<'conf>(config: &'conf Config, path: &String) -> (bool, &'conf JsonType) {
     match config
     .json_type_overrides
     .get(path)
     .unwrap_or(&JsonArray::Infer(JsonType::Infer))
     {
-        JsonArray::Infer(v) => (false, v.clone()),
-        JsonArray::Always(v) => (true, v.clone()),
+        JsonArray::Infer(v) => (false, v),
+        JsonArray::Always(v) => (true, v),
     }
 }
 
@@ -466,7 +466,7 @@ fn get_json_type_with_absolute_path(config: &Config, path: &String) -> (bool, Js
 #[cfg(feature = "json_types")]
 #[cfg(not(feature = "regex_path"))]
 #[inline]
-fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
+fn get_json_type<'conf>(config: &'conf Config, path: &String) -> (bool, &'conf JsonType) {
     get_json_type_with_absolute_path(config, path)
 }
 
@@ -476,12 +476,12 @@ fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
 #[cfg(feature = "json_types")]
 #[cfg(feature = "regex_path")]
 #[inline]
-fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
+fn get_json_type<'conf>(config: &'conf Config, path: &String) -> (bool, &'conf JsonType) {
     for (regex, json_array) in &config.json_regex_type_overrides {
         if regex.is_match(path) {
             return match json_array {
-                JsonArray::Infer(v) => (false, v.clone()),
-                JsonArray::Always(v) => (true, v.clone()),
+                JsonArray::Infer(v) => (false, v),
+                JsonArray::Always(v) => (true, v),
             };
         }
     }
@@ -492,6 +492,6 @@ fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
 /// Always returns `(false, JsonArray::Infer(JsonType::Infer)` if `json_types` feature is not enabled.
 #[cfg(not(feature = "json_types"))]
 #[inline]
-fn get_json_type(_config: &Config, _path: &String) -> (bool, JsonType) {
-    (false, JsonType::Infer)
+fn get_json_type<'conf>(_config: &'conf Config, _path: &String) -> (bool, &'conf JsonType) {
+    (false, &JsonType::Infer)
 }
