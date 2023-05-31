@@ -100,28 +100,37 @@ pub enum JsonArray {
     Infer(JsonType),
 }
 
-/// TODO: Docs
+/// Used as a parameter for `Config.add_json_type_override`. Defines how the XML path should be matched
+/// in order to apply the JSON type overriding rules. This enumerator exists to allow the same function
+/// to be used for multiple different types of path matching rules.
 #[derive(Debug)]
 pub enum PathMatcher {
-    /// TODO
+    /// An absolute path starting with a leading slash (`/`). E.g. `/a/b/c/@d`.
+    /// It's implicitly converted from `&str` and automatically includes the leading slash.
     Absolute(String),
-    /// TODO
+    /// A regex that will be checked against the XML path. E.g. `(\w/)*c$`.
+    /// It's implicitly converted from `regex::Regex`.
     #[cfg(feature = "regex_path")]
     Regex(Regex),
 }
 
+// For retro-compatibility and for syntax's sake, a string may be coerced into an absolute path.
 impl From<&str> for PathMatcher {
     fn from(value: &str) -> Self {
-        // For retro-compatibility and for syntax's sake, a string may be
-        // coerced into an absolute path.
-        PathMatcher::Absolute(value.into())
+        let path_with_leading_slash = if value.starts_with("/") {
+            value.into()
+        } else {
+            ["/", value].concat()
+        };
+
+        PathMatcher::Absolute(path_with_leading_slash)
     }
 }
 
+// ... While a Regex may be coerced into a regex path.
 #[cfg(feature = "regex_path")]
 impl From<Regex> for PathMatcher {
     fn from(value: Regex) -> Self {
-        // ... While a Regex may be coerced into a regex path.
         PathMatcher::Regex(value)
     }
 }
@@ -167,7 +176,7 @@ pub struct Config {
     pub xml_text_node_prop_name: String,
     /// Defines how empty elements like `<x />` should be handled.
     pub empty_element_handling: NullValue,
-    /// A list of XML paths with their JsonType overrides. They take precedence over the document-wide `json_type`
+    /// A map of XML paths with their JsonArray overrides. They take precedence over the document-wide `json_type`
     /// property. The path syntax is based on xPath: literal element names and attribute names prefixed with `@`.
     /// The path must start with a leading `/`. It is a bit of an inconvenience to remember about it, but it saves
     /// an extra `if`-check in the code to improve the performance.
@@ -177,7 +186,8 @@ pub struct Config {
     /// - path for `b` text node (007): `/a/b`
     #[cfg(feature = "json_types")]
     pub json_type_overrides: HashMap<String, JsonArray>,
-    /// TODO!
+    /// A list of pairs of regex and JsonArray overrides. They take precedence over both the document-wide `json_type`
+    /// property and the `json_type_overrides` property. The path syntax is based on xPath just like `json_type_overrides`.
     #[cfg(feature = "regex_path")]
     pub json_regex_type_overrides: Vec<(Regex, JsonArray)>,
 }
@@ -223,18 +233,16 @@ impl Config {
     /// - **XML**: `<a><b c="123">007</b></a>`
     /// - path for `c`: `/a/b/@c`
     /// - path for `b` text node (007): `/a/b`
-    /// This function will add the leading `/` if it's missing.
+    /// - regex path for any `element` node: `(\w/)*element$` [requires `regex_path` feature]
     #[cfg(feature = "json_types")]
-    pub fn add_json_type_override<P: Into<PathMatcher>>(self, path: P, json_type: JsonArray) -> Self {
+    pub fn add_json_type_override<P>(self, path: P, json_type: JsonArray) -> Self
+    where
+        P: Into<PathMatcher>
+    {
         let mut conf = self;
 
         match path.into() {
             PathMatcher::Absolute(path) => {
-                let path = if path.starts_with("/") {
-                    path
-                } else {
-                    ["/", &path].concat()
-                };
                 conf.json_type_overrides.insert(path, json_type);
             }
             #[cfg(feature = "regex_path")]
@@ -438,6 +446,9 @@ pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> 
     xml_str_to_json(xml.as_str(), config)
 }
 
+/// Returns a tuple for Array and Value enforcements for the current node or
+/// `(false, JsonArray::Infer(JsonType::Infer)` if the current path is not found
+/// in the list of paths with custom config.
 #[cfg(feature = "json_types")]
 #[inline]
 fn get_json_type_with_absolute_path(config: &Config, path: &String) -> (bool, JsonType) {
@@ -451,9 +462,7 @@ fn get_json_type_with_absolute_path(config: &Config, path: &String) -> (bool, Js
     }
 }
 
-/// Returns a tuple for Array and Value enforcements for the current node or
-/// `(false, JsonArray::Infer(JsonType::Infer)` if the current path is not found
-/// in the list of paths with custom config.
+/// Simply returns `get_json_type_with_absolute_path` if `regex_path` feature is disabled.
 #[cfg(feature = "json_types")]
 #[cfg(not(feature = "regex_path"))]
 #[inline]
@@ -461,6 +470,9 @@ fn get_json_type(config: &Config, path: &String) -> (bool, JsonType) {
     get_json_type_with_absolute_path(config, path)
 }
 
+/// Returns a tuple for Array and Value enforcements for the current node. Searches both absolute paths
+/// and regex paths, giving precedence to regex paths. Returns `(false, JsonArray::Infer(JsonType::Infer)`
+/// if the current path is not found in the list of paths with custom config.
 #[cfg(feature = "json_types")]
 #[cfg(feature = "regex_path")]
 #[inline]
