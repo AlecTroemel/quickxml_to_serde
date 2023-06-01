@@ -1,0 +1,46 @@
+name: Test
+
+on:
+  push:
+    branches: [ master ]
+
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Generate Dependencies Hash
+        id: cargo_toml_hash
+        uses: KEINOS/gh-action-hash-for-cache@e0515fd0280f1ef616e13cef3b2b9566938da2c4
+        with:
+          path: |
+            ./Cargo.toml
+
+      - name: Retrieve Cargo's Index - Try Cache
+        id: cargo_index_cache
+        uses: actions/cache/restore@v3
+        with:
+          path: ~/.cargo
+          key: ${{ runner.os }}-cargo-index-${{ steps.cargo_toml_hash.outputs.hash }}
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Retrieve Cargo's Index - Save to Cache
+        if: steps.cargo_index_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v3
+        with:
+          path: ~/.cargo
+          key: ${{ runner.os }}-cargo-index-${{ steps.cargo_toml_hash.outputs.hash }}
+
+
+      - name: Run tests
+        run: cargo test --verbose
