@@ -125,7 +125,7 @@ pub struct Config {
     /// A property name for XML text nodes.
     /// E.g. set it to `text` for `<x a="Hello!">Goodbye!</x>` to become `{"x": {"@a":"Hello!", "text":"Goodbye!"}}`
     /// XML nodes with text only and no attributes or no child elements are converted into JSON properties with the
-    /// name of the element. E.g. <x>Goodbye!</x>` becomes `{"x":"Goodbye!"}`
+    /// name of the element. E.g. `<x>Goodbye!</x>` becomes `{"x":"Goodbye!"}`
     /// Defaults to `#text`
     pub xml_text_node_prop_name: String,
     /// Defines how empty elements like `<x />` should be handled.
