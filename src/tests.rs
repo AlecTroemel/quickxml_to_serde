@@ -391,3 +391,74 @@ fn test_xml_str_to_json() {
 
     assert_eq!(expected, result.unwrap());
 }
+
+#[cfg(feature = "regex_path")]
+#[test]
+fn test_regex_json_type_overrides() {
+    use regex::Regex;
+
+    // test a non-array with array enforcement (as object).
+    let xml = r#"<a attr1="att1"><b c="att">1</b></a>"#;
+    let expected = json!({
+        "a": {
+            "@attr1":"att1",
+            "b": [{ "@c":"att", "#text":1 }]
+        }
+    });
+
+    let config = Config::new_with_defaults()
+        .add_json_type_override(
+            Regex::new(r"\w/b").unwrap(),
+            JsonArray::Always(JsonType::Infer
+        )
+    );
+
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+    // test a multiple elements of the same tag nested in different elements
+    let xml = r#"
+        <a attr1="att1">
+            <element name="el1" />
+            <element name="el2" />
+            <b attr2="att2">
+                <element name="el3" />
+                <c attr3="att3">
+                    <element name="el4" />
+                </c>
+            </b>
+        </a>
+    "#;
+
+    let expected = json!({
+        "a": {
+            "@attr1": "att1",
+            "element": [
+                { "@name": "el1" },
+                { "@name": "el2" }
+            ],
+            "b": {
+                "@attr2": "att2",
+                "element": [
+                    { "@name": "el3" }
+                ],
+                "c": {
+                    "@attr3": "att3",
+                    "element": [
+                        { "@name": "el4" }
+                    ]
+                }
+            },
+        }
+    });
+
+    let config = Config::new_with_defaults()
+        .add_json_type_override(
+            Regex::new(r"element").unwrap(),
+            JsonArray::Always(JsonType::Infer)
+        );
+
+    let result = xml_string_to_json(String::from(xml), &config);
+    assert_eq!(expected, result.unwrap());
+
+}
