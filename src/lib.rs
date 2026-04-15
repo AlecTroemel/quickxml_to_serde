@@ -237,7 +237,7 @@ impl Config {
     #[cfg(feature = "json_types")]
     pub fn add_json_type_override<P>(self, path: P, json_type: JsonArray) -> Self
     where
-        P: Into<PathMatcher>
+        P: Into<PathMatcher>,
     {
         let mut conf = self;
 
@@ -247,10 +247,7 @@ impl Config {
             }
             #[cfg(feature = "regex_path")]
             PathMatcher::Regex(regex) => {
-                conf.json_regex_type_overrides.push((
-                    regex,
-                    json_type
-                ));
+                conf.json_regex_type_overrides.push((regex, json_type));
             }
         }
 
@@ -446,16 +443,38 @@ pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> 
     xml_str_to_json(xml.as_str(), config)
 }
 
+/// Returns a Vector of (original xml string, JSON Value) per top level children in the original xml file.
+/// This is useful if the XML is a collection of repeated blocks, and you want the original XML of that block.
+pub fn map_xml_to_json_per_child(
+    xml: String,
+    config: &Config,
+) -> Result<Vec<(String, Value)>, Error> {
+    let root = Element::from_str(xml.as_str())?;
+    let iterator = root.children().map(|child| {
+        let mut xml = Vec::new();
+        child.write_to(&mut xml).expect("successfully write to vec");
+
+        let child_xml_str = String::from_utf8(xml).unwrap();
+        let child_json = xml_to_map(&child, config);
+        (child_xml_str, child_json)
+    });
+
+    Ok(iterator.collect())
+}
+
 /// Returns a tuple for Array and Value enforcements for the current node or
 /// `(false, JsonArray::Infer(JsonType::Infer)` if the current path is not found
 /// in the list of paths with custom config.
 #[cfg(feature = "json_types")]
 #[inline]
-fn get_json_type_with_absolute_path<'conf>(config: &'conf Config, path: &String) -> (bool, &'conf JsonType) {
+fn get_json_type_with_absolute_path<'conf>(
+    config: &'conf Config,
+    path: &String,
+) -> (bool, &'conf JsonType) {
     match config
-    .json_type_overrides
-    .get(path)
-    .unwrap_or(&JsonArray::Infer(JsonType::Infer))
+        .json_type_overrides
+        .get(path)
+        .unwrap_or(&JsonArray::Infer(JsonType::Infer))
     {
         JsonArray::Infer(v) => (false, v),
         JsonArray::Always(v) => (true, v),
