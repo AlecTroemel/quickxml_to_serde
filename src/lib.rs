@@ -74,7 +74,7 @@ use regex::Regex;
 mod tests;
 
 /// Defines how empty elements like `<x />` should be handled.
-/// `Ignore` -> exclude from JSON, `Null` -> `"x":null`, EmptyObject -> `"x":{}`.
+/// `Ignore` -> exclude from JSON, `Null` -> `"x":null`, EmptyObject -> `"x":{}`, `EmptyString` -> `"x":""`.
 /// `EmptyObject` is the default option and is how it was handled prior to v.0.4
 /// Using `Ignore` on an XML document with an empty root element falls back to `Null` option.
 /// E.g. both `<a><x/></a>` and `<a/>` are converted into `{"a":null}`.
@@ -83,6 +83,7 @@ pub enum NullValue {
     Ignore,
     Null,
     EmptyObject,
+    EmptyString,
 }
 
 /// Defines how the values of this Node should be converted into a JSON array with the underlying types.
@@ -418,6 +419,7 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
         match config.empty_element_handling {
             NullValue::Null => Some(Value::Null),
             NullValue::EmptyObject => Some(Value::Object(data)),
+            NullValue::EmptyString => Some(Value::String(String::new())),
             NullValue::Ignore => None,
         }
     }

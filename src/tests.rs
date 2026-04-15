@@ -36,6 +36,11 @@ fn test_empty_elements_valid() {
     let expected = json!({ "a": {"b":1} });
     let result = xml_string_to_json(xml.to_owned(), &conf);
     assert_eq!(expected, result.unwrap());
+
+    conf.empty_element_handling = NullValue::EmptyString;
+    let expected = json!({ "a": {"b":1, "x": ""} });
+    let result = xml_string_to_json(xml.to_owned(), &conf);
+    assert_eq!(expected, result.unwrap());
 }
 
 #[test]
