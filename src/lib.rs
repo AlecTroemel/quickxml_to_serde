@@ -74,7 +74,7 @@ use regex::Regex;
 mod tests;
 
 /// Defines how empty elements like `<x />` should be handled.
-/// `Ignore` -> exclude from JSON, `Null` -> `"x":null`, EmptyObject -> `"x":{}`.
+/// `Ignore` -> exclude from JSON, `Null` -> `"x":null`, EmptyObject -> `"x":{}`, `EmptyString` -> `"x":""`.
 /// `EmptyObject` is the default option and is how it was handled prior to v.0.4
 /// Using `Ignore` on an XML document with an empty root element falls back to `Null` option.
 /// E.g. both `<a><x/></a>` and `<a/>` are converted into `{"a":null}`.
@@ -83,6 +83,7 @@ pub enum NullValue {
     Ignore,
     Null,
     EmptyObject,
+    EmptyString,
 }
 
 /// Defines how the values of this Node should be converted into a JSON array with the underlying types.
@@ -237,7 +238,7 @@ impl Config {
     #[cfg(feature = "json_types")]
     pub fn add_json_type_override<P>(self, path: P, json_type: JsonArray) -> Self
     where
-        P: Into<PathMatcher>
+        P: Into<PathMatcher>,
     {
         let mut conf = self;
 
@@ -247,10 +248,7 @@ impl Config {
             }
             #[cfg(feature = "regex_path")]
             PathMatcher::Regex(regex) => {
-                conf.json_regex_type_overrides.push((
-                    regex,
-                    json_type
-                ));
+                conf.json_regex_type_overrides.push((regex, json_type));
             }
         }
 
@@ -421,6 +419,7 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
         match config.empty_element_handling {
             NullValue::Null => Some(Value::Null),
             NullValue::EmptyObject => Some(Value::Object(data)),
+            NullValue::EmptyString => Some(Value::String(String::new())),
             NullValue::Ignore => None,
         }
     }
@@ -451,11 +450,14 @@ pub fn xml_string_to_json(xml: String, config: &Config) -> Result<Value, Error> 
 /// in the list of paths with custom config.
 #[cfg(feature = "json_types")]
 #[inline]
-fn get_json_type_with_absolute_path<'conf>(config: &'conf Config, path: &String) -> (bool, &'conf JsonType) {
+fn get_json_type_with_absolute_path<'conf>(
+    config: &'conf Config,
+    path: &String,
+) -> (bool, &'conf JsonType) {
     match config
-    .json_type_overrides
-    .get(path)
-    .unwrap_or(&JsonArray::Infer(JsonType::Infer))
+        .json_type_overrides
+        .get(path)
+        .unwrap_or(&JsonArray::Infer(JsonType::Infer))
     {
         JsonArray::Infer(v) => (false, v),
         JsonArray::Always(v) => (true, v),
