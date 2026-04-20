@@ -377,7 +377,13 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
         for child in el.children() {
             match convert_node(child, config, &path) {
                 Some(val) => {
-                    let name = &child.name().to_string();
+                    let name = if child.prefix().is_some() {
+                        let formatted_name = format!("{}:{}", child.prefix().unwrap(), child.name().to_string());
+                        formatted_name
+                    } else {
+                        child.name().to_string()
+                    };
+                    let name = &name;
 
                     #[cfg(feature = "json_types")]
                     let path = [path.clone(), "/".to_owned(), name.clone()].concat();
@@ -427,8 +433,14 @@ fn convert_node(el: &Element, config: &Config, path: &String) -> Option<Value> {
 
 fn xml_to_map(e: &Element, config: &Config) -> Value {
     let mut data = Map::new();
+    let name = if e.prefix().is_some() {
+        let formatted_name = format!("{}:{}", e.prefix().unwrap(), e.name().to_string());
+        formatted_name
+    } else {
+        e.name().to_string()
+    };
     data.insert(
-        e.name().to_string(),
+        name,
         convert_node(&e, &config, &String::new()).unwrap_or(Value::Null),
     );
     Value::Object(data)
