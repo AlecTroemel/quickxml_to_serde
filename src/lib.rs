@@ -78,7 +78,7 @@ mod tests;
 /// `EmptyObject` is the default option and is how it was handled prior to v.0.4
 /// Using `Ignore` on an XML document with an empty root element falls back to `Null` option.
 /// E.g. both `<a><x/></a>` and `<a/>` are converted into `{"a":null}`.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum NullValue {
     Ignore,
     Null,
@@ -93,7 +93,7 @@ pub enum NullValue {
 /// * `Always` - the nodes are converted into a JSON array regardless of how many there are.
 /// E.g. `<a><b>1</b></a>` becomes an array with a single value `{"a": {"b": [1] }}` and
 /// `<a><b>1</b><b>2</b><b>3</b></a>` also becomes an array `{"a": {"b": [1, 2, 3] }}`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum JsonArray {
     /// Convert the nodes into a JSON array even if there is only one element
     Always(JsonType),
@@ -104,7 +104,7 @@ pub enum JsonArray {
 /// Used as a parameter for `Config.add_json_type_override`. Defines how the XML path should be matched
 /// in order to apply the JSON type overriding rules. This enumerator exists to allow the same function
 /// to be used for multiple different types of path matching rules.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PathMatcher {
     /// An absolute path starting with a leading slash (`/`). E.g. `/a/b/c/@d`.
     /// It's implicitly converted from `&str` and automatically includes the leading slash.
@@ -158,7 +158,7 @@ pub enum JsonType {
 
 /// Tells the converter how to perform certain conversions.
 /// See docs for individual fields for more info.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Numeric values starting with 0 will be treated as strings.
     /// E.g. convert `<agent>007</agent>` into `"agent":"007"` or `"agent":7`
